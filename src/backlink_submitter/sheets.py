@@ -5,7 +5,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from .contracts import PROJECT, SHEET_ID, TARGET, now, safe_artifact, validate_outcome
+from .contracts import PROJECT, SHEET_ID, TARGET, now, safe_artifact, validate_dispatch_metadata, validate_outcome
 
 
 def service(*, writable=False):
@@ -51,9 +51,11 @@ def write_outcome(
             receipt.get("backlink_id"),
             receipt.get("prior_attempts"),
             receipt.get("attempt_increment"),
-            receipt.get("click_dispatched"),
+            receipt.get("dispatch_confirmed") is True,
         ) != (PROJECT, backlink_id, prior[4], 1, True):
             raise ValueError("True Submit receipt/key/prior attempt mismatch")
+        validate_dispatch_metadata(receipt.get("dispatch"))
+        safe_artifact(receipt)
         # Reserving the receipt before API mutation prevents retry after an ambiguous write/readback.
         try:
             with receipt_path.with_suffix(".sheet-intent").open("x") as stream:

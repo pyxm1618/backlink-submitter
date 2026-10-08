@@ -1,5 +1,6 @@
 """Small WYRPlay boundaries; no historical engine, fallback project or OAuth client."""
 
+import asyncio
 import csv
 import hashlib
 import json
@@ -190,6 +191,23 @@ def save_evidence(path, evidence):
     return path
 
 
+def validate_dispatch_metadata(metadata):
+    if not isinstance(metadata, dict) or set(metadata) != {"method", "host", "path"}:
+        raise ValueError("Only safe dispatch method/host/path metadata is allowed")
+    if (
+        metadata["method"] not in {"POST", "PUT", "PATCH"}
+        or not isinstance(metadata["host"], str)
+        or not metadata["host"]
+        or urlparse("https://" + metadata["host"]).hostname != metadata["host"]
+        or not isinstance(metadata["path"], str)
+        or not metadata["path"].startswith("/")
+        or urlparse(metadata["path"]).query
+        or urlparse(metadata["path"]).fragment
+    ):
+        raise ValueError("Invalid submission dispatch method/host/path")
+    safe_artifact(metadata)
+
+
 async def submit_once(
     journal,
     *,
@@ -204,6 +222,9 @@ async def submit_once(
     missing_required,
     backlink_id=None,
     prior_attempts="",
+    page=None,
+    submission_request=None,
+    dispatch_timeout_ms=30000,
 ):
     validate_project(project_id)
     validate_payload(payload)
@@ -222,16 +243,25 @@ async def submit_once(
         False,
     ):
         raise ValueError("Outgoing WYRPlay identity/AI mismatch")
+    matcher = None
+    if submission_request is not None:
+        if submission_request.get("verified") is not True:
+            raise ValueError("Submission request matcher must be adapter-verified")
+        matcher = {key: submission_request.get(key) for key in ("method", "host", "path")}
+        validate_dispatch_metadata(matcher)
+    if type(dispatch_timeout_ms) is not int or not 0 < dispatch_timeout_ms <= 30000:
+        raise ValueError("Dispatch observation timeout must be within 30 seconds")
     path = Path(journal)
     path.parent.mkdir(parents=True, exist_ok=True)
     intent = {
         "project_id": PROJECT,
         "backlink_id": backlink_id,
         "prior_attempts": prior_attempts,
-        "state": "SUBMIT_RESULT_UNCONFIRMED",
+        "state": "SUBMIT_DISPATCH_UNCONFIRMED",
         "started_at": now(),
         "attempt_increment": 0,
-        "click_dispatched": False,
+        "dispatch_confirmed": False,
+        "dispatch": None,
     }
     # Atomic O_EXCL across processes/restarts. Caller uses the same per-key path for every run.
     try:
@@ -240,14 +270,41 @@ async def submit_once(
             json.dump(intent, stream)
     except FileExistsError:
         raise ValueError("Existing submit intent; no automatic duplicate/retry") from None
+    observed = asyncio.Event()
+
+    def observe(request):
+        parsed = urlparse(request.url)
+        metadata = {"method": request.method, "host": parsed.hostname, "path": parsed.path}
+        if not observed.is_set() and parsed.scheme in {"https", "http"} and metadata == matcher:
+            # Never read headers, body, cookies or query parameters into the receipt.
+            intent.update(
+                state="SUBMIT_RESULT_UNCONFIRMED", attempt_increment=1, dispatch_confirmed=True, dispatch=metadata
+            )
+            save_evidence(path, intent)
+            observed.set()
+
+    listening = page is not None and matcher is not None
+    if listening:
+        page.on("request", observe)
     try:
-        await click()
-    except Exception:
-        # May have dispatched before failing. Keep intent and preserve unknown; do not log the exception body.
-        raise
-    intent.update(attempt_increment=1, click_dispatched=True)
+        try:
+            await click()
+        except Exception:
+            # UI failure does not erase a request already observed. Otherwise keep the intent and stop.
+            if not observed.is_set():
+                raise
+        if listening and not observed.is_set():
+            try:
+                await asyncio.wait_for(observed.wait(), dispatch_timeout_ms / 1000)
+            except TimeoutError:
+                intent["state"] = (
+                    "SUBMIT_RESULT_UNCONFIRMED" if intent["dispatch_confirmed"] else "SUBMIT_DISPATCH_UNCONFIRMED"
+                )
+    finally:
+        if listening:
+            page.remove_listener("request", observe)
     save_evidence(path, intent)
-    return 1
+    return int(intent["dispatch_confirmed"])
 
 
 def timestamp(value):

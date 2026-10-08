@@ -41,8 +41,15 @@ def test_fixture_final_submit_upload_artifacts_sheet_and_once(tmp_path, after_sc
             "free_verified": True,
             "reciprocal_required": False,
             "automatic_submit_allowed": True,
+            "submission_request": {
+                "verified": True,
+                "method": "POST",
+                "host": "site.example",
+                "path": "/api/submissions",
+            },
+            "dispatch_timeout_ms": 200,
         }
-        html = """<title>Submit Product</title><form onsubmit="event.preventDefault();document.body.innerHTML='<h1>WYRPlay submission received</h1>'">
+        html = """<title>Submit Product</title><form onsubmit="event.preventDefault();fetch('/api/submissions', {method:'POST'});document.body.innerHTML='<h1>WYRPlay submission received</h1>'">
         <input id=name><input id=url><input id=email><textarea id=desc></textarea>
         <input id=logo type=file><input id=shots type=file multiple><button id=submit type=submit>Submit Product</button></form>"""
         async with async_playwright() as p:

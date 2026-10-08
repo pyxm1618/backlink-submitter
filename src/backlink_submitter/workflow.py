@@ -1,5 +1,6 @@
 """Bounded adapter flow. No real adapter currently permits final Submit; no batch runner."""
 
+import json
 import re
 import secrets
 from pathlib import Path
@@ -125,12 +126,18 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
             missing_required=required_unknown,
             backlink_id=backlink_id,
             prior_attempts=prior[4],
+            page=page,
+            submission_request=adapter.get("submission_request"),
+            dispatch_timeout_ms=adapter.get("dispatch_timeout_ms", 30000),
         )
     except ValueError:
         raise  # gate refusal: no submission result exists
     except Exception:
         error = "Submit action response unconfirmed; inspect intent; no automatic retry"
-    result = classify(before, "", submitted=bool(increment or error))
+    receipt = json.loads(intent_path.read_text())
+    result = classify(before, "", submitted=True)
+    if not increment:
+        result["reason"] = "SUBMIT_DISPATCH_UNCONFIRMED"
     checkpoint = dict(
         result,
         run_id=run_id,
@@ -149,6 +156,8 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
         screenshot_after="",
         error=error,
         attempt_increment=increment,
+        dispatch_confirmed=receipt["dispatch_confirmed"],
+        dispatch=receipt["dispatch"],
     )
     save_evidence(site / "evidence.json", checkpoint)
     after_saved = ""
@@ -156,7 +165,8 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
         after = await page.locator("body").inner_text(timeout=10000)
         await page.screenshot(path=str(after_path), full_page=True, timeout=10000)
         after_saved = str(after_path)
-        result = classify(before, after, submitted=bool(increment or error))
+        if increment:
+            result = classify(before, after, submitted=True)
     except Exception:
         error = "Post-submit observation failed; persisted intent/checkpoint; no automatic retry"
     # E2/E3/E4 can be added by the dedicated proof functions, never by generic page.url.
@@ -177,6 +187,8 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
         screenshot_after=after_saved,
         error=error,
         attempt_increment=increment,
+        dispatch_confirmed=receipt["dispatch_confirmed"],
+        dispatch=receipt["dispatch"],
     )
     evidence_path = save_evidence(site / "evidence.json", evidence)
     # Store only observed receipt excerpt, not raw HTML/session/OTP values.

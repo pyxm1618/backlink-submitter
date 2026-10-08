@@ -102,11 +102,33 @@ def submit_args(path, click, **extra):
 def test_once_survives_restarts_and_counts_true_submit(contract, tmp_path):
     calls = []
 
+    class RequestPage:
+        callback = None
+
+        def on(self, name, callback):
+            assert name == "request"
+            self.callback = callback
+
+        def remove_listener(self, name, callback):
+            assert self.callback == callback
+            self.callback = None
+
+    page = RequestPage()
+
     async def click():
+        from types import SimpleNamespace
+
         calls.append("submit")
+        page.callback(SimpleNamespace(method="POST", url="https://site.example/api/submissions?token=fixture"))
 
     path = tmp_path / "intent.json"
-    assert asyncio.run(contract.submit_once(**submit_args(path, click))) == 1
+    args = submit_args(
+        path,
+        click,
+        page=page,
+        submission_request={"verified": True, "method": "POST", "host": "site.example", "path": "/api/submissions"},
+    )
+    assert asyncio.run(contract.submit_once(**args)) == 1
     with pytest.raises(ValueError):
         asyncio.run(contract.submit_once(**submit_args(path, click)))
     assert calls == ["submit"]
@@ -150,7 +172,7 @@ def test_click_timeout_keeps_intent_and_prevents_retry(contract, tmp_path):
         asyncio.run(contract.submit_once(**submit_args(path, click)))
     with pytest.raises(ValueError):
         asyncio.run(contract.submit_once(**submit_args(path, click)))
-    assert json.loads(path.read_text())["state"] == "SUBMIT_RESULT_UNCONFIRMED"
+    assert json.loads(path.read_text())["state"] == "SUBMIT_DISPATCH_UNCONFIRMED"
 
 
 @pytest.mark.parametrize(
@@ -460,7 +482,8 @@ def test_sheet_attempt_increment_requires_matching_single_use_receipt(contract, 
                 "backlink_id": "site.example",
                 "prior_attempts": "",
                 "attempt_increment": 1,
-                "click_dispatched": True,
+                "dispatch_confirmed": True,
+                "dispatch": {"method": "POST", "host": "site.example", "path": "/api/submissions"},
             }
         )
     )
