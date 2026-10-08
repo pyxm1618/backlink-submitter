@@ -1,8 +1,8 @@
 {
   "as_of": "2026-10-08",
-  "source_run_id": "20261008-142831-e5175e",
+  "source_run_id": "20261008-131026-d9032b",
   "project_id": "wyrplay",
-  "functional_canary": "FUNCTIONAL CANARY NOT YET VERIFIED",
+  "functional_canary": "FUNCTIONAL CANARY VERIFIED",
   "ready_for_controlled_rollout": false,
   "validated_live": [
     "Google Chrome dedicated profile handoff",
@@ -14,15 +14,21 @@
     "Fail closed",
     "Human verification stop",
     "Unknown mandatory field stop",
-    "Non-final click reclassification"
+    "Non-final click reclassification",
+    "StartupFound True Submit with exact POST dispatch matcher",
+    "Single-use Attempt +1",
+    "E4 anonymous public listing and visible WYRPlay backlink",
+    "E4 status upgrade with Attempt increment 0 and full A:J readback"
   ],
   "not_validated_live": [
-    "True Submit",
-    "Attempt +1",
-    "Full production post-submit E1/E2/E3/E4 chain"
+    "E1 accepted page receipt",
+    "E2 official email receipt (connector unavailable)",
+    "E3 unique tracking URL",
+    "Ambiguous dispatch/timeout recovery in production",
+    "Controlled rollout"
   ],
-  "true_submit_total": 0,
-  "attempt_increment_total": 0,
+  "true_submit_total": 1,
+  "attempt_increment_total": 1,
   "platforms": [
     {
       "platform": "FoundrList",
@@ -73,16 +79,26 @@
       "platform": "StartupFound",
       "domain": "startupfound.com",
       "submit_url": "https://startupfound.com/submit",
-      "status": "需人工核查",
-      "current_reason": "OWNER_INPUT_REQUIRED",
-      "note": "Form reached. Funding and Solo-founder/Multiple founders required but unconfirmed. Research official project facts and request Owner values; not platform failure.",
-      "true_submit": false,
-      "attempt_increment": 0,
+      "status": "成功",
+      "current_reason": "E4_LIVE_LISTING",
+      "note": "Owner-authorized one-time Functional Canary: final click=1, exact POST dispatch confirmed, Attempt=1, E4 anonymous public listing/backlink and full A:J readback verified. Public page still displays Waiting for moderation; no claim of moderation approval. Preserve intent; no resubmission.",
+      "true_submit": true,
+      "attempt_increment": 1,
       "automatic_submit_allowed": false,
-      "evidence_code": "",
+      "evidence_code": "E4",
       "tracking_url": "",
-      "listing_url": "",
-      "historical_evidence_sha256": "79f3ee8e235aad29618e4d651e6c91ef4b15a6c585bb1b06d2b1f1d465626c32"
+      "listing_url": "https://startupfound.com/s/wyrplay",
+      "historical_evidence_sha256": "79f3ee8e235aad29618e4d651e6c91ef4b15a6c585bb1b06d2b1f1d465626c32",
+      "sheet_row": 6249,
+      "attempt": 1,
+      "dispatch_confirmed": true,
+      "dispatch": {
+        "method": "POST",
+        "host": "startupfound.com",
+        "path": "/api/startups/submit"
+      },
+      "source_run_id": "20261008-131026-d9032b",
+      "runtime_evidence_path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/evidence.json"
     },
     {
       "platform": "Startup List",
@@ -100,5 +116,7 @@
       "historical_evidence_sha256": "24e1eb3e0e49791b46308eb678154a1488f73c5b8b7b579d470eeba8fdb94066"
     }
   ],
-  "note": "Historical receipt hashes provide provenance, not E1-E4. Private screenshots/browser credentials are external. Re-read official Sheet before work; do not treat these snapshots as current login state."
+  "note": "StartupFound production snapshot from 2026-10-08; other platform entries remain historical observations from 20261008-142831-e5175e, not current login proof. Canary verified; Controlled Rollout not started or authorized. All automatic Submit flags remain false. Refresh official Sheet before future work and preserve per-key intent.",
+  "controlled_rollout": "NOT STARTED",
+  "production_verification": "../../docs/PRODUCTION_CANARY_VERIFICATION.json"
 }

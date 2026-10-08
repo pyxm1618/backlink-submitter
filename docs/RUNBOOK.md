@@ -8,9 +8,10 @@
 ## 当前停点
 
 看 `projects/wyrplay/canary_state.json` 与 `docs/CURRENT_STATE.md`。
-目前 **FUNCTIONAL CANARY NOT YET VERIFIED / NOT READY FOR CONTROLLED ROLLOUT**。
+目前 **FUNCTIONAL CANARY VERIFIED / CONTROLLED ROLLOUT NOT STARTED**。
+StartupFound 已有一次 True Submit、匹配 dispatch、E4 和精确 Sheet 回读；见 `PRODUCTION_CANARY_VERIFICATION.json`。
 migration、绿色 tests、fixture Submit、历史成功项都不能改变这个结论。
-本次迁移没有获准新外链提交；下一阶段必须等 Owner 指令。
+StartupFound 单次 Owner 授权已消耗，不可重复提交；下一阶段必须等新的 Owner 指令。
 
 ## 冷启动预检
 
@@ -102,4 +103,4 @@ E4 质量记录不改成功定义，但 noindex 等可以降低后续优先级�
 报告逐站状态/证据/True Submit/Attempt，原总数=sum(approved+deferred+reject+unknown)，
 所有排除有逐项事实；未核验不等拒绝。不改其他项目、不批量创造空行结果。
 要升级 functional Canary，必须真实 Submit、真实证据、真实 Sheet 回读且五类错误=0。
-这件事尚未发生，迁移完成后停止等待 Owner。
+StartupFound 已完成这条生产验证链；其他平台与 rollout 未获授权。仓库状态收口后停止等待 Owner。

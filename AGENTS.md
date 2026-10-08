@@ -6,4 +6,5 @@ Read `projects/wyrplay/canary_state.json` and refresh the official Sheet before 
 
 Never guess facts, bypass human verification, repeat True Submit, create evidence-less
 Success/Pending, or use another project's payload. Unknown project fails closed.
-No automatic rollout: current functional Canary remains unverified. Follow Owner scope.
+Functional Canary is verified for WYRPlay × StartupFound only; see docs/PRODUCTION_CANARY_VERIFICATION.json.
+Controlled Rollout has not started. No automatic rollout or permanent Submit authorization. Follow Owner scope.

@@ -22,5 +22,5 @@ def test_cold_preflight_is_readonly_and_recovers_canary_state():
     report = json.loads(run.stdout)
     assert report["manifest_version"] == "3.0-final"
     assert report["submit"] == report["sheet_writes"] == report["attempt_increment"] == 0
-    assert report["functional_canary"] == "FUNCTIONAL CANARY NOT YET VERIFIED"
+    assert report["functional_canary"] == "FUNCTIONAL CANARY VERIFIED"
     assert report["ready_for_controlled_rollout"] is False

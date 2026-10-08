@@ -2,8 +2,10 @@
 
 WYRPlay 外链执行合同、正式资料包与可恢复运行说明。只支持 `wyrplay`；不是 BacklinkOS 的复制品。
 
-当前：**FUNCTIONAL CANARY NOT YET VERIFIED / NOT READY FOR CONTROLLED ROLLOUT**。
-真实验证过会话交接、部分填表/上传与安全回写，尚无真正产品 Submit。
+当前：**FUNCTIONAL CANARY VERIFIED / CONTROLLED ROLLOUT NOT STARTED**。
+WYRPlay × StartupFound 已验证一次真实 Submit、POST dispatch、Attempt=1、E4 和完整 Sheet A:J 回读。
+生产安全元数据见 [Canary verification](docs/PRODUCTION_CANARY_VERIFICATION.json)。
+一次 Canary 不授权 rollout；`automatic_submit_allowed` 保持 false。
 本仓库的 fixture 测试不能替代生产 Canary。
 
 ## Start

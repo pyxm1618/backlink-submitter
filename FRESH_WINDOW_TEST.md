@@ -12,8 +12,9 @@ GOOGLE_APPLICATION_CREDENTIALS 或默认现有 service-account 文件访问；�
 
 验收：新 AI 能说明三张表、平台/项目事实、全局黑名单边界、content submission 价值、
 reciprocal 人工价值判断、缺字段 Owner 闭环、Human Verification、E1-E4、True Submit/Attempt，
-并恢复原5站停点和 FUNCTIONAL CANARY NOT YET VERIFIED / NOT READY FOR CONTROLLED ROLLOUT。
-必须指出 FoundrList 非最终点击、StartupFound 资料缺口、Startup List 临时 OAuth 故障。
+并恢复各站状态及 FUNCTIONAL CANARY VERIFIED / CONTROLLED ROLLOUT NOT STARTED。
+必须指出 FoundrList 非最终点击、StartupFound 已完成一次 E4 Canary 且禁止重投、Startup List 临时 OAuth 故障。
+生产验证摘要见 `docs/PRODUCTION_CANARY_VERIFICATION.json`；旧冷 clone/迁移回执保持历史原样。
 给下一步但不执行；测试绿色不等于真实提交成功。
 
 运行：

@@ -1,0 +1,75 @@
+{
+  "project_id": "wyrplay",
+  "backlink_id": "startupfound.com",
+  "sheet_row": 6249,
+  "source_run_id": "20261008-131026-d9032b",
+  "source_main_commit": "a4a11e3baf209c4fa66bad0b4612bcaa249477e0",
+  "source": "Owner-confirmed production facts and existing runtime verification; repository-only closeout.",
+  "submission_started_at": "2026-10-08T13:11:12.695449+00:00",
+  "e4_verified_at": "2026-10-08T13:19:33.963956+00:00",
+  "sheet_verified_at": "2026-10-08T13:20:12.999672+00:00",
+  "functional_canary": "FUNCTIONAL CANARY VERIFIED",
+  "controlled_rollout": "NOT STARTED",
+  "ready_for_controlled_rollout": false,
+  "automatic_submit_allowed": false,
+  "final_click": 1,
+  "dispatch_confirmed": true,
+  "dispatch": {
+    "method": "POST",
+    "host": "startupfound.com",
+    "path": "/api/startups/submit"
+  },
+  "attempt": 1,
+  "attempt_increment": 1,
+  "evidence_codes": [
+    "E4"
+  ],
+  "result_url": "https://startupfound.com/s/wyrplay",
+  "sheet_status": "成功",
+  "duplicate_submit": 0,
+  "other_sheet_rows_modified": 0,
+  "production_sheet_writes": 3,
+  "e4_update_attempt_increment": 0,
+  "e4": {
+    "anonymous": true,
+    "public_verified": true,
+    "visible_wyrplay_backlink": true,
+    "link_rel": "nofollow noopener",
+    "indexability": "index"
+  },
+  "platform_moderation": "Waiting for moderation",
+  "evidence_limits": {
+    "E1": "On review not accepted by existing classifier",
+    "E2": "EMAIL_EVIDENCE_UNAVAILABLE",
+    "E3": "No accepted tracking proof"
+  },
+  "runtime_evidence": {
+    "evidence.json": {
+      "path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/evidence.json",
+      "sha256": "2c30534077cd51964667e80810a039e710ba2b5cca840ced2a146ebad14f866d"
+    },
+    "pre_submit_gate.json": {
+      "path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/pre_submit_gate.json",
+      "sha256": "3f9addd4749d618504b0708db3dc7311c1b25d73d91a8ccd89d96d162b811932"
+    },
+    "e4-public-proof.json": {
+      "path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/e4-public-proof.json",
+      "sha256": "719dd6636d1bcf8bc9e62ef1bad934d7c1c30eee9fb69b1dcb01fd6aae0e8695"
+    },
+    "e4_outcome_readback.json": {
+      "path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/e4_outcome_readback.json",
+      "sha256": "d0582508fd90feb270cc7690724e6a627a0252adfbbb55d56f9831d5847f7ead"
+    },
+    "final_sheet_readback.json": {
+      "path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/20261008-131026-d9032b/startupfound.com/final_sheet_readback.json",
+      "sha256": "4260fce982237117788d8d7af7f73d314936459f8eff2aa43ee529e1e2b53be8"
+    }
+  },
+  "persistent_submit_intent_path": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/submit-intents/wyrplay/startupfound.com.json",
+  "closeout_scope": {
+    "new_true_submit": 0,
+    "sheet_writes": 0,
+    "new_rollout": false
+  },
+  "note": "Safe metadata only. No raw page content, Sheet notes, credentials or browser state copied. External paths are provenance references, not files supplied by a clone. Preserve persistent intent; never resubmit this joint key."
+}

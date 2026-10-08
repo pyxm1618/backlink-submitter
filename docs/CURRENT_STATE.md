@@ -1,32 +1,51 @@
 # 当前 WYRPlay 工作状态（2026-10-08）
 
 正式身份/Sheet/资料包见 project.json，原包 3.0-final 完整保留。
-旧 worktree 来源 HEAD `b19ab2e32de0868f686a4d4a03b37e598cf8f337`，修复文件当时为未跟踪文件；
-不要用 HEAD 误认为涵盖这些修复，迁移清单另有文件 SHA256。
-最新真实现场来源 run `20261008-142831-e5175e`，语义状态及摘要凭据已随仓库保存。
-本地旧 runtime 仅作为历史附件留存；clone 恢复规则与停点不需要它。
 
-**FUNCTIONAL CANARY NOT YET VERIFIED**
+**FUNCTIONAL CANARY VERIFIED**
 
-**NOT READY FOR CONTROLLED ROLLOUT**
+**CONTROLLED ROLLOUT NOT STARTED**
 
-| 平台 | 已验证 | 当前下一步 |
+## 生产 Canary
+
+WYRPlay × StartupFound，外链管理 row 6249，backlink_id `startupfound.com`：
+
+- Owner 单次授权，真实 final click=1。
+- dispatch_confirmed=true：`POST startupfound.com /api/startups/submit`。
+- Attempt=1；后续 E4 状态升级 Attempt increment=0。
+- E4：全新匿名 context 验证公开 listing 与可见 WYRPlay backlink。
+- Result URL：https://startupfound.com/s/wyrplay；Sheet 最终状态=成功，完整 A:J 已精确回读。
+- Duplicate Submit=0；其他 Sheet 行修改=0。
+- 公开页面仍标注 Waiting for moderation；E4 不代表平台 moderation 已批准。
+- E1 文案未被现有识别器接受，E2 邮件连接不可用，E3 未取得认可 tracking proof；通过依据为 E4。
+
+安全元数据与外部 runtime 路径见 [PRODUCTION_CANARY_VERIFICATION.json](PRODUCTION_CANARY_VERIFICATION.json)。
+生产 run `20261008-131026-d9032b`；本地证据保持仓库外，不复制敏感页面、Sheet 备注或凭据。
+固定 project×platform persistent intent 已保留，禁止重复 Submit。
+
+## 执行边界
+
+Controlled Rollout 尚未开始，也未获授权；`ready_for_controlled_rollout=false`。
+所有 `automatic_submit_allowed=false` 保持不变，StartupFound 的单次运行时授权已消耗。
+不处理历史 Attempt，不扩大平台池；未来工作必须遵循新的 Owner 范围并刷新正式 Sheet。
+本次仅固化仓库状态，新真实 Submit=0、Sheet write=0。
+
+## 原 Canary 平台
+
+其他四站保留旧现场快照（run `20261008-142831-e5175e`），不是当前会话保证，本次未访问。
+
+| 平台 | 已记录的状态 | 下一步边界 |
 |---|---|---|
-| FoundrList | Google OAuth、产品表单、正式字段、SVG logo、5截图 | 免费 badge/合法社区资格需要 Owner 判断。Join queue 仅弹窗，不是真 Submit |
-| PeerPush | 安全停止于人类验证 | Owner 人工验证后读现场，不绕过 |
-| AppLauncher | basic Google OAuth | Workspace/Username onboarding/session 尚未确认，继续账户流程核验 |
-| StartupFound | OAuth、表单可到达 | Funding、Founder structure 必填资料缺口；找项目可信事实/Owner 输入 |
-| Startup List | 正常 Google session，官方 OAuth 报 missing client_id | PLATFORM_OAUTH_CONFIGURATION_ERROR 暂故障；未来只读复核，不永久黑名单 |
+| FoundrList | 表单/上传曾验证；免费资格需 Owner 判断 | Join queue 仅弹窗，非 Submit；不自动挂 badge/制造社区活动 |
+| PeerPush | HUMAN_VERIFICATION_REQUIRED | Owner 人工验证，不绕过 |
+| AppLauncher | basic Google OAuth；onboarding/session 未确认 | 获授权后核验 Workspace/Username 流程 |
+| StartupFound | 成功，Attempt=1，E4 | 已完成本次 Canary，保留 intent，不重投 |
+| Startup List | PLATFORM_OAUTH_CONFIGURATION_ERROR | 临时 OAuth 故障，不永久黑名单 |
 
-所有5站 True Submit=0、Attempt Increment=0，无本批 E1-E4。
-已验证错误计数均0：Wrong Project、Duplicate、Evidence-less Pending/Success、Wrong Sheet Write。
-历史 ratingfacts E4 成功不代表本批 functional Canary。
+## 历史迁移来源
 
-本次迁移只读 Sheet 预检实测 19,103 个 WYRPlay 联合键，无重复：
-unknown19050 / 待提交8 / 需人工核查32 / 不适用10 / 历史未验证2 / 成功1 / 审核中0。
-总表平台行31213；黑名单行6206。这是时间快照，不是下次必须吻合的固定数字。
-新窗口必须刷新，不能当做近期登录状态。完整迁移预检见 MIGRATION_VERIFICATION.json。
-
-下一步不是扩大提交池：先由 Owner 解决原5站的资格/项目资料/人工挑战/账户流程/平台故障，
-明确授权继续 same-five Canary 后再读 Sheet 和 Profile；至少一次真实产品 Submit 的生产证据链
-经核验后才可以讨论 controlled rollout。迁移本身不授权它。
+旧 worktree HEAD `b19ab2e32de0868f686a4d4a03b37e598cf8f337`，修复文件当时为未跟踪文件；
+迁移清单另有文件 SHA256，不能用该 HEAD 误认为涵盖修复。
+`MIGRATION_VERIFICATION.json`、`COLD_CLONE_VERIFICATION.json` 和旧 Canary receipt 保持历史原样。
+其中未验证 Canary/旧 Sheet 数量描述是当时快照，由本次生产记录取代当前状态；
+绿色 fixture tests 或历史 ratingfacts 成功不能替代本次 StartupFound 的真实生产证据。
