@@ -1,0 +1,108 @@
+{
+  "domain": "startupfound.com",
+  "submit_url": "https://startupfound.com/submit",
+  "verified_at": "2026-10-08",
+  "fields": {
+    "Product / App Name": "input[placeholder=\"StartupFound\"]",
+    "Website URL": "input[placeholder=\"https://startupfound.com\"]",
+    "One-line Pitch / Tagline": "input[placeholder=\"Very short description of your startup\"]",
+    "Long Description": "textarea[placeholder=\"Tell more about your startup\"]"
+  },
+  "required_fields": [
+    "Product / App Name",
+    "Website URL",
+    "One-line Pitch / Tagline",
+    "Funding",
+    "Founder structure",
+    "Category"
+  ],
+  "logo_selector": "input[type=\"file\"][id=\"v-0-1-7\"]",
+  "logo_format": "png",
+  "qualification": "QUALIFIED_B",
+  "free_verified": true,
+  "reciprocal_required": false,
+  "automatic_submit_allowed": false,
+  "final_action_verified": true,
+  "final_submit_selector": "form button[type=\"submit\"]",
+  "submission_request": {
+    "method": "POST",
+    "host": "startupfound.com",
+    "path": "/api/startups/submit",
+    "verified": true
+  },
+  "manual_checks": [
+    "Re-read current form and joint-key row before use",
+    "Check Owner-confirmed Funding bootstrapped and Founder structure solo radios",
+    "Select Gaming from real category options and verify underlying selection",
+    "Optional unknown founder name/socials/revenue stay blank",
+    "Owner must explicitly approve single True Submit and row readiness/outcome writes; currently not approved"
+  ],
+  "provenance": {
+    "source": "https://startupfound.com/_nuxt/CQAP59Ao.js",
+    "submit_handler": "Form submit constructs product FormData and calls /api/startups/submit with POST when isUpdate=false",
+    "free_flow_source": "https://startupfound.com/_nuxt/CnX4LcZv.js",
+    "free_flow": "Free branch enters /submit/success only after form response; not evidence of present dispatch",
+    "runtime_run_id": "20261008-110047-c39b10",
+    "pre_submit_evidence": "startupfound-pre-submit.json",
+    "source_verification_only": true
+  },
+  "choice_fields": {
+    "Funding": {
+      "control_selector": "input[name=\"funding\"][value=\"bootstrapped\"]",
+      "click_selector": "label[for=\"v-0-1-2-bootstrapped\"]",
+      "required": true,
+      "confirmed_fact": "Funding",
+      "option_label": "Bootstrapped/Self-funded",
+      "option_value": "bootstrapped",
+      "checked_verified": true
+    },
+    "Founder structure": {
+      "control_selector": "input[name=\"team\"][value=\"solo\"]",
+      "click_selector": "label[for=\"v-0-1-3-solo\"]",
+      "required": true,
+      "confirmed_fact": "Founder structure",
+      "option_label": "Solo-founder",
+      "option_value": "solo",
+      "checked_verified": true
+    }
+  },
+  "taxonomy": {
+    "category": "Gaming",
+    "required": true,
+    "control_selector": "input[name=\"categories\"]",
+    "open_key": "ArrowDown",
+    "option_selector": "[role=\"option\"]",
+    "option_text": "Gaming",
+    "selected_container_selector": ".el-select__selection",
+    "selected_text": "🎮 Gaming",
+    "selected_verified": true,
+    "note": "Combobox input remains empty after selection; verify selected Gaming tag. Do not infer an unobserved underlying category value."
+  },
+  "logo_required": true,
+  "logo_max_bytes": 2097152,
+  "image_selector": "input[type=\"file\"][id=\"v-0-1-8\"]",
+  "image_required": false,
+  "image_max_bytes": 2097152,
+  "image_asset": "assets/screenshots/01-home-1440x900.png",
+  "execution_conditions": {
+    "authenticated_form_verified": true,
+    "human_verification_present": false,
+    "required_controls_valid": true,
+    "unique_final_button": true,
+    "final_button_enabled": true,
+    "blacklisted": false,
+    "persistent_submit_intent_exists": false,
+    "joint_key": [
+      "wyrplay",
+      "startupfound.com"
+    ],
+    "sheet_row_at_verification": 6249,
+    "sheet_status_at_verification": "需人工核查",
+    "attempt_at_verification": "",
+    "owner_submit_approved": false,
+    "dispatch_confirmed": false,
+    "true_submit": 0,
+    "sheet_writes": 0,
+    "note": "Time-scoped observations from the recorded run, not current authorization or a passed Functional Canary. Refresh row, blacklist, intent and live form before any future approved Submit."
+  }
+}
