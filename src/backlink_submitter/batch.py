@@ -134,7 +134,7 @@ def select_candidates(snapshot, runtime):
                 outcome="TEMPORARILY_UNAVAILABLE", reason="HISTORICAL_PLATFORM_EXCLUSION_REVIEW", coverage="deferred"
             )
         elif not official_url(m[2], domain):
-            item.update(reason="OFFICIAL_SUBMIT_URL_UNCONFIRMED", submit_url="")
+            item.update(process=True, reason="REQUIRES_OFFICIAL_ENTRY_DISCOVERY", submit_url="")
         else:
             item.update(process=True, reason="REQUIRES_ADAPTER_AND_LIVE_CHECKS")
         # No raw legacy notes, emails, URLs with credentials or other project rows persist.
@@ -163,7 +163,10 @@ def select_candidates(snapshot, runtime):
 
 def adapter_gate(adapter, pack):
     for field in adapter.get("required_fields", []):
-        if field == "Category" and adapter.get("taxonomy", {}).get("selected_verified"):
+        taxonomy = adapter.get("taxonomy", {})
+        if field == "Category" and (
+            taxonomy.get("selected_verified") or taxonomy.get("native_select") and taxonomy.get("option_verified")
+        ):
             continue
         value = field_value(pack, field, required=True, platform=adapter["domain"])
         if isinstance(value, dict):
@@ -340,8 +343,14 @@ def resume_candidate(candidates, key, runtime):
         raise ValueError("Protected/attempted/blacklisted row cannot resume")
     if (Path(runtime) / "submit-intents/wyrplay" / (key + ".json")).exists():
         raise ValueError("Persistent intent cannot resume submission")
-    if not official_url(item["submit_url"], item["domain"]) or saved.get("submit_url") != item["submit_url"]:
+    saved_url = saved.get("submit_url", "")
+    if not official_url(saved_url, item["domain"]):
         raise ValueError("Resume URL changed; review required")
+    if item["submit_url"] and saved_url != item["submit_url"] and not saved.get("discovery_visited"):
+        raise ValueError("Resume URL changed; review required")
+    if saved.get("discovery_visited") and saved_url not in saved["discovery_visited"]:
+        raise ValueError("Resume URL lacks observed official discovery provenance")
+    item["submit_url"] = saved_url
     item.update(resume=True, process=True)
     return item
 
@@ -469,9 +478,6 @@ async def run_batch(
             if limit is not None and len(jobs) >= limit:
                 deferred.append(dict(item, process=False, reason="RUN_LIMIT_DEFERRED", coverage="deferred"))
                 continue
-            if not (pack["root"] / "adapters" / (item["domain"] + ".json")).is_file():
-                deferred.append(dict(item, process=False, reason="ADAPTER_REQUIRED", coverage="unknown"))
-                continue
             job = dict(
                 item,
                 mode=mode,
@@ -503,6 +509,14 @@ async def run_batch(
         if len(results) != original_total:
             raise ValueError("Batch coverage mismatch")
         save_evidence(directory / "results.json", results)
+        browser_events = []
+        for result in worker_results:
+            if result.get("browser_opened_at") and result.get("browser_closed_at"):
+                browser_events.extend([(result["browser_opened_at"], 1), (result["browser_closed_at"], -1)])
+        active = maximum = 0
+        for _, change in sorted(browser_events):
+            active += change
+            maximum = max(maximum, active)
         report = {
             "project_id": "wyrplay",
             "mode": mode,
@@ -510,6 +524,11 @@ async def run_batch(
             "workers_started": len(jobs),
             "concurrency": 1 if mode == "handoff" else concurrency,
             "same_domain_max": 1,
+            "observed_browser_max": maximum,
+            "browser_intervals_recorded": len(browser_events) // 2,
+            "worker_groups_reclaimed": True,
+            "window_outcomes": dict(Counter(x["outcome"] for x in worker_results)),
+            "window_reasons": dict(Counter(x["reason"] for x in worker_results)),
             "coverage": coverage_report(results),
             "outcomes": dict(Counter(x["outcome"] for x in results)),
             "reasons": dict(Counter(x["reason"] for x in results)),

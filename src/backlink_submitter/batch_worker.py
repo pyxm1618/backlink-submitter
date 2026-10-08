@@ -143,7 +143,19 @@ async def prepare_form(page, adapter, pack):
         if not await control.is_checked():
             raise ValueError("REQUIRED_FIELD_UNCONFIRMED")
     taxonomy = adapter.get("taxonomy")
-    if taxonomy:
+    if taxonomy and taxonomy.get("native_select"):
+        if (
+            taxonomy.get("category")
+            not in {"Games", "Gaming", "Entertainment", "Party Games", "Social Games", "Web Application"}
+            or taxonomy.get("option_text") != taxonomy["category"]
+            or not taxonomy.get("option_verified")
+        ):
+            raise ValueError("TAXONOMY_UNVERIFIED")
+        control = page.locator(taxonomy["control_selector"])
+        await control.select_option(label=taxonomy["option_text"], timeout=10000)
+        if await control.input_value() != taxonomy["option_value"]:
+            raise ValueError("TAXONOMY_UNCONFIRMED")
+    elif taxonomy:
         if taxonomy.get("category") not in {
             "Gaming",
             "Games",
@@ -338,8 +350,38 @@ async def run_site(job, pack, api, playwright):
         return {"outcome": "需人工核查", "reason": "PERSISTENT_SUBMIT_INTENT", "coverage": "deferred"}
     adapter_path = pack["root"] / "adapters" / (job["domain"] + ".json")
     if not adapter_path.is_file():
-        return {"outcome": "需人工核查", "reason": "ADAPTER_REQUIRED", "coverage": "unknown"}
+        from .discovery import discover
+
+        profile = Path(job["runtime_root"]) / "profiles" / job["domain"]
+        async with site_context(playwright, profile) as ctx:
+            opened_at = now()
+            result = await discover(await ctx.new_page(), pack, job)
+        result.update(browser_opened_at=opened_at, browser_closed_at=now())
+        recovery_job = dict(job, submit_url=result.get("submit_url", job["submit_url"]))
+        if result["outcome"] != "READY_TO_SUBMIT" or job["mode"] == "dry-run":
+            async with sheet_writer(job["runtime_root"]):
+                record_non_submit(recovery_job, result, api, prior)
+        if result["outcome"] != "READY_TO_SUBMIT" or job["mode"] == "dry-run":
+            return dict(
+                result,
+                coverage="approved"
+                if result["outcome"] == "READY_TO_SUBMIT"
+                else "confirmed_reject"
+                if result["outcome"] == "GLOBAL_BLACKLIST"
+                else "deferred"
+                if result["outcome"] != "需人工核查"
+                else "unknown",
+            )
+        job = recovery_job
     adapter = json.loads(adapter_path.read_text())
+    # A generated, official-provenance entry is reusable when the master URL is blank;
+    # a conflicting existing master URL still stops for review, never silently changes.
+    if (
+        not job["submit_url"]
+        and adapter.get("provenance", {}).get("official_source") == adapter.get("submit_url")
+        and official_url(adapter.get("submit_url", ""), job["domain"])
+    ):
+        job = dict(job, submit_url=adapter["submit_url"])
     if adapter.get("domain") != job["domain"] or adapter.get("submit_url") != job["submit_url"]:
         return {"outcome": "需人工核查", "reason": "ADAPTER_OFFICIAL_URL_MISMATCH", "coverage": "unknown"}
     gate = None if adapter.get("assessment") else adapter_gate(adapter, pack)
@@ -422,12 +464,17 @@ async def main(path):
     ):
         raise ValueError("Unsafe worker identity")
     pack = load_project("wyrplay", Path(__file__).resolve().parents[2] / "projects/wyrplay")
-    if job["mode"] not in {"dry-run", "live"} or job["mode"] == "live" and job.get("runtime_approved") is not True:
+    if (
+        job["mode"] not in {"dry-run", "live", "handoff"}
+        or job["mode"] == "live"
+        and job.get("runtime_approved") is not True
+    ):
         raise ValueError("No scoped runtime approval")
     from playwright.async_api import async_playwright
 
     async with async_playwright() as pw:
-        result = await run_site(job, pack, service(writable=job["mode"] == "live"), pw)
+        api = service(writable=job["mode"] == "live")
+        result = await handoff(job, api, pw) if job["mode"] == "handoff" else await run_site(job, pack, api, pw)
     save_evidence(job["result_path"], dict(result, backlink_id=job["backlink_id"]))
 
 
@@ -449,15 +496,17 @@ async def handoff(job, api, playwright):
     async with site_context(playwright, Path(job["runtime_root"]) / "profiles" / job["domain"], headed=True) as ctx:
         # Guard every request to the verified final endpoint, including manually clicked buttons.
         pack_root = Path(__file__).resolve().parents[2] / "projects/wyrplay"
-        adapter = json.loads((pack_root / "adapters" / (job["domain"] + ".json")).read_text())
-        matcher = adapter["submission_request"]
+        adapter_path = pack_root / "adapters" / (job["domain"] + ".json")
+        matcher = json.loads(adapter_path.read_text())["submission_request"] if adapter_path.is_file() else None
 
         from urllib.parse import urlparse
 
         async def no_submit(route):
             r = route.request
             u = urlparse(r.url)
-            if (r.method, u.hostname, u.path) == (matcher["method"], matcher["host"], matcher["path"]):
+            if (matcher is None and r.method not in {"GET", "HEAD", "OPTIONS"}) or (
+                matcher and (r.method, u.hostname, u.path) == (matcher["method"], matcher["host"], matcher["path"])
+            ):
                 await route.abort()
             else:
                 await route.continue_()
@@ -486,7 +535,7 @@ async def readonly_requests(route):
     if route.request.method not in {"GET", "HEAD", "OPTIONS"}:
         await route.abort()
     else:
-        await route.continue_()
+        await route.fallback()
 
 
 async def readonly_ready(page, adapter):

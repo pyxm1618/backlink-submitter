@@ -1,0 +1,57 @@
+{
+  "project_id": "wyrplay",
+  "verified_at": "2026-10-08T15:04:42.655951+00:00",
+  "base_main_commit": "65b979b933353fa1c346c0b8cd9633b3a57ec03b",
+  "mode": "dry-run",
+  "selection": "First 50 processable WYRPlay candidates in official master row order after three-table protected-state exclusion",
+  "candidate_order_verified": true,
+  "window_count": 50,
+  "workers_started": 50,
+  "window_outcomes": {
+    "HUMAN_VERIFICATION_REQUIRED": 12,
+    "需人工核查": 34,
+    "TEMPORARILY_UNAVAILABLE": 4
+  },
+  "window_reasons": {
+    "HUMAN_VERIFICATION_REQUIRED": 6,
+    "OFFICIAL_SUBMIT_URL_UNCONFIRMED": 9,
+    "ADAPTER_REVIEW_REQUIRED": 17,
+    "OWNER_LOGIN_REQUIRED": 6,
+    "HTTP_UNAVAILABLE_NOT_PERMANENT_PROOF": 3,
+    "FINAL_ACTION_UNVERIFIED": 7,
+    "OFFICIAL_PAGE_UNAVAILABLE": 1,
+    "FINAL_SELECTOR_UNVERIFIED": 1
+  },
+  "generated_adapters": [],
+  "observed_browser_max": 2,
+  "same_domain_max": 1,
+  "browser_contexts_opened_and_closed": 50,
+  "worker_groups_reclaimed": true,
+  "remaining_batch_headless_browser_count": 0,
+  "candidate_total": 19103,
+  "coverage": {
+    "approved": 0,
+    "deferred": 18999,
+    "confirmed_reject": 56,
+    "unknown": 48
+  },
+  "coverage_reconciled": true,
+  "tests": {
+    "pytest_passed": 128,
+    "original_tests_preserved": 104,
+    "new_tests": 24,
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "mypy": "PASS",
+    "readonly_preflight": "PASS",
+    "headless_browser_smoke": "PASS"
+  },
+  "startupfound_full_A_J_unchanged": true,
+  "new_true_submit": 0,
+  "sheet_writes": 0,
+  "rollout_started": false,
+  "runtime": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/batch-20261008-145808-b11716",
+  "runtime_report_sha256": "9f7dd1f7ad4f4499398080aa4b55d7d19a8fbc8fefda9c4bfac6dd4d40305f8c",
+  "limits": "No production adapter met all gates in this window. Complex SPA, choices and uploads remain review/Owner boundaries; fixture READY is not a production READY or rollout verification.",
+  "note": "Safe aggregate metadata and external evidence paths only. No credentials, browser state, raw pages or Sheet notes copied. Existing blacklist entries and protected states are not new discovery findings."
+}

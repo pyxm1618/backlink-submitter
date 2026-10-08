@@ -56,3 +56,9 @@ Controlled Rollout 尚未开始，也未获授权；`ready_for_controlled_rollou
 运行方法及边界见 `BATCH_RUNNER.md`。此次只读 dry-run，不改 StartupFound 成功记录或历史 Attempt。
 StartupFound 的 Founder 显示为平台账户 Display name Wang Tachyon，未获 Owner 确认；
 记录 `OWNER_INPUT_REQUIRED`，详见 `STARTUPFOUND_FOUNDER_REVIEW.json`。未修改 listing。
+
+## 只读 Discovery 能力
+
+无 adapter 的可处理候选现在复用现有 worker 进行有界官网核验，凭正证据生成 adapter 或明确分流。
+当前轮仅前50个可处理候选的顺序 dry-run；真实 Submit=0、Sheet write=0，未启动 LIVE。
+核验结果见 `DISCOVERY_DRY_RUN_VERIFICATION.json`；未覆盖的平台仍保留原显式 unknown/deferred。

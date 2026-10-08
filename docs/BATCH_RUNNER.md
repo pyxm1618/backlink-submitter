@@ -10,8 +10,9 @@
 
 先跳过黑名单、成功/审核中/历史未验证/需人工核查等已有状态、非零 Attempt、persistent intent。
 历史总表“失效/已排除”只进入待复核，不能因旧 timeout 判永久失效或新增黑名单。
-没有官方入口或已验证 adapter 的记录保留 unknown；不扫全部未知网站、不生成通用 selector。
-这仍按全量正式池顺序推进，后续新增已验证 adapter 后无需手选固定 3–5 站。
+没有 adapter 的可处理候选会进入只读 Discovery；入口缺失时只从官网与观察到的同域链接寻找。
+不能确认入口/字段/资格/matcher 的记录保留 unknown 或对应明确阻碍；不猜路径或 selector。
+按全量正式池顺序推进，`--limit 50` 表示前50个可处理候选，无需人工挑选平台。
 `--start-after KEY` 和 `--limit N` 可限定本轮执行窗口；未处理记录保留 deferred/unknown。
 报告同时保留 approved/deferred/confirmed_reject/unknown，original total=sum(states)。
 
@@ -49,6 +50,29 @@ LIVE 授权在启动时以 `.used` 标记消耗，每个最终动作再次检查
 保持提交 adapter 的 `automatic_submit_allowed=false`；授权仅施加到内存副本。
 已有成功 StartupFound 和历史 Attempt 行永远不因批量运行重投。
 
+## 只读 Discovery
+
+Discovery 复用每站 worker、90秒截止和 context finally，不新增浏览器常驻池。
+优先读取总表同域 HTTPS 提交入口，缺失/不可达时回到官方主页；最多5个页面，只追踪真实
+观察到的 Submit/Add product/Launch/Contribute 等同域链接。跨域主页面导航和全部写方法被拦截。
+公开 JS 仅 GET 观察到的官方 script URL，不猜 bundle 路径，不追踪 API GET 的重定向。
+
+表单语义来自 label/name/placeholder/aria 和实际 options；仅使用唯一稳定属性 selector。
+WYRPlay identity 来自原3.0-final，必填未知或选择/上传规则无法确认则 OWNER_INPUT_REQUIRED/人工核查。
+当前自动生成范围为明确的产品表单、原生单选 taxonomy，以及可证实的匿名免费适配规则；
+复杂 choice/widget/upload 条件与复杂 SPA handler 保留待审，不能为扩大 READY 数量猜测。
+原生 matcher 要求明确 POST/action 且无可能覆盖提交的脚本/inline handler/按钮 action override。
+JS matcher 只接受唯一、完整可证明的 observed-form submit listener，preventDefault 和唯一 literal
+fetch method/host/path；通用 bundle 中出现 endpoint 字符串不构成 handler 绑定证据。
+
+只有 adapter_gate 和当前 readonly_ready 均通过才原子生成新 adapter，包含官方来源、字段、
+最终动作、dispatch、安全摘要与时间 provenance；已有 adapter 不覆盖，不调用 git。
+生成后 DRY RUN 返回 READY；未来经 Owner 新授权的 LIVE 会释放 Discovery context，再进入原有
+worker 的真实填写、fresh Sheet/黑名单/intent/授权检查以及 run_submission，不能直接 Submit。
+分类原因 OFFICIAL_SUBMIT_URL_UNCONFIRMED、DISPATCH_MATCHER_UNVERIFIED、ADAPTER_REVIEW_REQUIRED
+仍对应现有需人工核查，不新增平行状态数据库。AI-only 仅项目不适用；全球淘汰必须命中明确
+官方完整政策声明，普通付费价格、超时/404/无法查明均不能推断全球淘汰。
+
 ## Adapter 边界
 
 复用已有 fields、required_fields、choice_fields、taxonomy、upload、qualification、free_verified、
@@ -83,6 +107,9 @@ Attempt 不变；DRY RUN 只保留现场提示，不改正式 Sheet。这些提�
 ```
 
 仅打开已排入人工队列的指定站，使用该域专用 profile，最长 180 秒；最终提交 endpoint 被拦截。
+Discovery hint 可保存实际观察到的同域恢复入口；resume 重新验证来源与联合键。
+没有已验证 matcher 的 handoff 保守拦截全部写方法；若登录依赖写请求，也保持阻碍，
+等待核验 final endpoint 后再使用原 handoff，不能借人工窗口探测 Submit。
 Owner 正常完成登录/验证后关闭该专用窗口，不删除 SingletonLock，不绕过任何挑战。
 随后恢复同一站并重新检查：
 
