@@ -69,10 +69,11 @@ Owner 登录 Google 不等于每个平台已登录。真实检查平台 session�
 OAuth -> onboarding -> form -> upload -> final action 连续性；不要中间关闭导致 SPA/session 丢失。
 可以正常使用 Owner 已登录 Google 账户，禁止密码重输/挑战/2FA/风险绕过。
 任何 CAPTCHA/Cloudflare Human Verification/设备确认 -> HUMAN_VERIFICATION_REQUIRED，停在现场给 Owner。
-本仓库不自动打开 headed 窗口或抢焦点；人工步骤由 Owner 完成。
+正常 batch 仅 headless；只有 Owner 显式运行单站 `handoff --owner-human-action` 才打开 dedicated headed 窗口。
+人工步骤由 Owner 完成，最终提交 endpoint 被拦截；随后 `resume` 重新核验，不能自动绕过挑战。
 导航20s、元素10s、提交响应30s，单站90s；需 OTP 最多额外180s。
 关闭 page/context 用 timeout；失败销毁 worker，不能无限堆页。小批 concurrency2、同域1，
-只有 live Canary 通过才可最多4。当前没有批量执行器/rollout授权。
+只有 live Canary 通过才可最多4。最小 batch runner 已实现，见 `BATCH_RUNNER.md`；本轮未授权 LIVE rollout。
 
 ## 精准填写与最终 Submit
 

@@ -49,3 +49,10 @@ Controlled Rollout 尚未开始，也未获授权；`ready_for_controlled_rollou
 `MIGRATION_VERIFICATION.json`、`COLD_CLONE_VERIFICATION.json` 和旧 Canary receipt 保持历史原样。
 其中未验证 Canary/旧 Sheet 数量描述是当时快照，由本次生产记录取代当前状态；
 绿色 fixture tests 或历史 ratingfacts 成功不能替代本次 StartupFound 的真实生产证据。
+
+## 批量能力准备（未执行 LIVE）
+
+最小候选分流、默认2/最多4 worker、同域1、进程回收与单站 handoff/resume 已实现；
+运行方法及边界见 `BATCH_RUNNER.md`。此次只读 dry-run，不改 StartupFound 成功记录或历史 Attempt。
+StartupFound 的 Founder 显示为平台账户 Display name Wang Tachyon，未获 Owner 确认；
+记录 `OWNER_INPUT_REQUIRED`，详见 `STARTUPFOUND_FOUNDER_REVIEW.json`。未修改 listing。

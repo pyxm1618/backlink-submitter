@@ -1,0 +1,27 @@
+{
+  "project_id": "wyrplay",
+  "platform": "startupfound.com",
+  "listing_url": "https://startupfound.com/s/wyrplay",
+  "checked_at": "2026-10-08T13:49:16.533563+00:00",
+  "displayed_founder": "Wang Tachyon",
+  "platform_profile_display_name": "Wang Tachyon",
+  "source_classification": "PLATFORM_ACCOUNT_DISPLAY_NAME_AUTOMATICALLY_RENDERED",
+  "public_render_source": "https://startupfound.com/_nuxt/DGFH9tHs.js",
+  "public_render_expression": "t(y)?.display_name || t(y)?.username",
+  "form_observation": "Submit and Edit Startup have Funding and Team structure controls, but no Founder name control.",
+  "owner_confirmed_founder_identity": false,
+  "oauth_origin": "UNKNOWN: account display name matches; no verified evidence that Google supplied the original value.",
+  "project_sources_checked": [
+    "projects/wyrplay/submission_manifest.json: unknown_do_not_invent.founder_name=null",
+    "projects/wyrplay/confirmed_facts.json: only Funding and Founder structure",
+    "projects/wyrplay/FIELD_POLICY.md: operator must not be converted to Founder"
+  ],
+  "reason": "OWNER_INPUT_REQUIRED",
+  "required_owner_confirmation": "Confirm the intended public WYRPlay Founder identity and whether Wang Tachyon is an approved name.",
+  "actions": {
+    "listing_modified": false,
+    "existing_success_record_modified": false,
+    "true_submit": 0,
+    "sheet_writes": 0
+  }
+}

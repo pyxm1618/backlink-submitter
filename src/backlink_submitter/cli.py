@@ -1,4 +1,4 @@
-"""Read-only recovery entry point. Intentionally has no submit, login or write command."""
+"""Recovery, readonly batch planning and explicitly Owner-scoped execution entry point."""
 
 import argparse
 import asyncio
@@ -32,15 +32,45 @@ async def browser_smoke():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="WYRPlay recovery/preflight only; no external mutation")
-    parser.add_argument("command", choices=["preflight"])
+    parser = argparse.ArgumentParser(
+        description="WYRPlay preflight/batch; dry-run default, LIVE needs an external Owner grant"
+    )
+    parser.add_argument("command", choices=["preflight", "batch", "resume", "handoff"])
     parser.add_argument("--project", required=True)
     parser.add_argument("--read-sheet", action="store_true")
     parser.add_argument("--browser-smoke", action="store_true")
+    parser.add_argument("--mode", choices=["dry-run", "live"], default="dry-run")
+    parser.add_argument("--concurrency", type=int, default=2)
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--start-after")
+    parser.add_argument("--owner-approval", type=Path)
+    parser.add_argument("--backlink-id")
+    parser.add_argument("--owner-human-action", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     try:
         pack = load_project(args.project, root / "projects/wyrplay")
+        if args.command != "preflight":
+            from .batch import run_batch
+
+            if args.command in {"resume", "handoff"} and not args.backlink_id:
+                raise ValueError("Resume/handoff must target one backlink key")
+            if args.command == "batch" and args.backlink_id:
+                raise ValueError("Single key belongs to resume/handoff, not arbitrary row selection")
+            report = asyncio.run(
+                run_batch(
+                    pack,
+                    mode="handoff" if args.command == "handoff" else args.mode,
+                    concurrency=args.concurrency,
+                    limit=args.limit,
+                    start_after=args.start_after,
+                    approval=args.owner_approval,
+                    resume_key=args.backlink_id,
+                    owner_human_action=args.owner_human_action,
+                )
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 0
         state = json.loads((pack["root"] / "canary_state.json").read_text())
         report = {
             "project_id": args.project,
@@ -68,9 +98,10 @@ def main():
         print(
             json.dumps(
                 {
-                    "preflight": "FAIL",
+                    "command": args.command,
+                    "result": "FAIL",
                     "error_type": type(exc).__name__,
-                    "action": "Check configuration/dependency externally; no Submit or write performed",
+                    "action": "Inspect safe runtime evidence; preserve intents; never retry Submit blindly",
                 }
             ),
             file=sys.stderr,

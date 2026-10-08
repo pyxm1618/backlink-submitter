@@ -1,4 +1,4 @@
-"""Bounded adapter flow. No real adapter currently permits final Submit; no batch runner."""
+"""Protected single-station adapter flow; runtime authorization is supplied by the caller."""
 
 import json
 import re
@@ -198,8 +198,8 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
         row,
         backlink_id,
         result,
-        reason=result["reason"],
-        summary=f"{result['evidence_code'] or 'NO_EVIDENCE'} | {evidence_path}",
+        reason=prior[8] + "\n" + result["reason"],
+        summary=prior[9] + "\n" + f"{result['evidence_code'] or 'NO_EVIDENCE'} | {evidence_path}",
         attempt_increment=increment,
         expected_prior=prior,
         attempt_receipt=intent_path,

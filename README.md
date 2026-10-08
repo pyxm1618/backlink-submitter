@@ -41,9 +41,11 @@ python3 -m venv .venv
 
 ## Implementation
 
-`src/backlink_submitter/` 保持六个小模块：contracts（项目/证据/OTP/防重）、
-browser、sheets、workflow（精确 adapter 填报和单站执行）、cli、包入口。
-默认 CLI **没有提交命令**。`workflow.run_submission` 是受保护的单站库函数；
+`src/backlink_submitter/` 复用 contracts、browser、sheets、workflow 的单站合同，
+新增 batch 候选/进程池与 batch_worker 单站生命周期；不新增调度基础设施。
+CLI 的 `preflight` 和默认 `batch --mode dry-run` 只读；`batch --mode live` 需要仓库外的单次 Owner 授权。
+使用方法、资源回收和人工恢复见 [Batch runner](docs/BATCH_RUNNER.md)。
+`workflow.run_submission` 仍为受保护的单站库函数；
 当前五个站点都没有获准启用自动最终 Submit。今后须 Owner 授权、重新核验资格及最终动作，
 再保存经过现场验证的 adapter。禁止用猜测 selector 开启执行。
 

@@ -113,3 +113,83 @@ def is_blacklisted(api, backlink_id, domain):
         row and (row[0] == backlink_id or (len(row) > 1 and row[1].lower().removeprefix("www.") == domain))
         for row in rows[1:]
     )
+
+
+def read_candidate_tables(api):
+    info = api.spreadsheets().get(spreadsheetId=SHEET_ID, fields="spreadsheetId,sheets.properties.title").execute()
+    if info["spreadsheetId"] != SHEET_ID:
+        raise ValueError("Official spreadsheet identity mismatch")
+    return {
+        key: read_range(api, tab + "!A:" + end)
+        for key, tab, end in [("master", "外链总表", "R"), ("blacklist", "黑名单", "R"), ("execution", "外链管理", "J")]
+    }
+
+
+def append_global_blacklist(api, candidate, finding):
+    """Positive platform evidence only; no project row deletion or whitelist inversion."""
+    from .batch import GLOBAL_REASONS, MASTER_HEADER, official_url
+
+    if finding.get("outcome") != "GLOBAL_BLACKLIST" or finding.get("reason") not in GLOBAL_REASONS:
+        raise ValueError("Project mismatch/unknown is not global blacklist evidence")
+    if (
+        not finding.get("marker")
+        or not finding.get("checked_at")
+        or not official_url(finding.get("source_url", ""), candidate["domain"])
+    ):
+        raise ValueError("Global blacklist requires verified positive provenance")
+    safe_artifact(finding)
+    prior = full_row(api, candidate["row"])
+    if prior[:2] != [PROJECT, candidate["backlink_id"]] or prior[3] not in {"", "待提交"} or prior[4] not in {"", "0"}:
+        raise ValueError("Joint key/state changed before blacklist write")
+    rows = read_range(api, "黑名单!A:R")
+    if not rows or rows[0] != MASTER_HEADER:
+        raise ValueError("Global blacklist header mismatch")
+    if any(
+        r
+        and (
+            r[0] == candidate["backlink_id"]
+            or len(r) > 1
+            and r[1].removeprefix("www.") == candidate["domain"].removeprefix("www.")
+        )
+        for r in rows[1:]
+    ):
+        return None
+    values = [""] * 18
+    values[:7] = [
+        candidate["backlink_id"],
+        candidate["domain"],
+        candidate["submit_url"],
+        "backlink-submitter verified qualification",
+        now(),
+        "已排除",
+        finding["reason"],
+    ]
+    values[12:16] = [
+        finding["checked_at"],
+        finding["source_url"] + " | " + finding["marker"],
+        "已排除",
+        finding["reason"],
+    ]
+    result = (
+        api.spreadsheets()
+        .values()
+        .append(
+            spreadsheetId=SHEET_ID,
+            range="黑名单!A:R",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [values]},
+        )
+        .execute()
+    )
+    address = result["updates"]["updatedRange"]
+    import re
+
+    if not re.fullmatch(r"'?黑名单'?!A\d+:R\d+", address):
+        raise ValueError("Unexpected blacklist write range; no retry")
+    actual = read_range(api, address)
+    if len(actual) != 1 or actual[0] + [""] * (18 - len(actual[0])) != values:
+        raise ValueError("Global blacklist full A:R readback failed; no retry")
+    if full_row(api, candidate["row"]) != prior:
+        raise ValueError("Project row changed during blacklist append; manual review")
+    return address

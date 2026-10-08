@@ -1,0 +1,524 @@
+"""One headless station per process; human handoff is an explicit single-station command."""
+
+import asyncio
+import fcntl
+import json
+import re
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from .batch import adapter_gate, assessment_result, official_url
+from .browser import verify_listing
+from .contracts import (
+    RECEIPTS,
+    classify,
+    field_value,
+    load_project,
+    now,
+    save_evidence,
+    timestamp,
+    tracking_pending,
+    validate_payload,
+)
+from .sheets import append_global_blacklist, full_row, is_blacklisted, service, write_outcome
+from .workflow import fill_fields, human_boundary, run_submission
+
+
+@asynccontextmanager
+async def sheet_writer(runtime):
+    # All batch workers and recovery paths serialize official writes, across processes.
+    path = Path(runtime) / "sheet-writer.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                await asyncio.sleep(0.05)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+@asynccontextmanager
+async def site_context(playwright, profile, *, headed=False, browser=None):
+    root = Path(profile).expanduser()
+    if (root / "SingletonLock").exists() or (root / "SingletonLock").is_symlink():
+        raise ValueError("PROFILE_IN_USE")
+    root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
+    context = None
+    try:
+        if browser:
+            if headed:
+                raise ValueError("Headed handoff requires the dedicated persistent profile")
+            context = await browser.new_context(service_workers="block")
+        else:
+            context = await playwright.chromium.launch_persistent_context(
+                str(root),
+                channel="chrome",
+                headless=not headed,
+                service_workers="block",
+                ignore_default_args=["--use-mock-keychain"],
+            )
+        yield context
+    finally:
+        if context:
+            await asyncio.wait_for(context.close(), 10)
+
+
+async def inspect_page(page, adapter, pack):
+    try:
+        await human_boundary(page)
+    except ValueError:
+        return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "HUMAN_VERIFICATION_REQUIRED"}
+    if not official_url(page.url, adapter["domain"]):
+        return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "OWNER_LOGIN_REQUIRED"}
+    if adapter.get("authenticated_selector"):
+        if await page.locator(adapter["authenticated_selector"]).count() != 1:
+            return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "OWNER_LOGIN_REQUIRED"}
+    for selector in adapter.get("fields", {}).values():
+        if await page.locator(selector).count() != 1:
+            return {"outcome": "需人工核查", "reason": "FORM_OR_SELECTOR_CHANGED"}
+    return None
+
+
+def record_non_submit(job, result, api, prior):
+    runtime = Path(job["runtime_root"])
+    evidence = {
+        **result,
+        "project_id": "wyrplay",
+        "backlink_id": job["backlink_id"],
+        "domain": job["domain"],
+        "submit_url": job["submit_url"],
+        "row": job["row"],
+        "checked_at": now(),
+        "submit": 0,
+        "attempt_increment": 0,
+    }
+    path = save_evidence(Path(job.get("evidence_dir", runtime / "checks")) / (job["backlink_id"] + ".json"), evidence)
+    if result["outcome"] == "HUMAN_VERIFICATION_REQUIRED":
+        save_evidence(
+            runtime / "human-queue" / (job["backlink_id"] + ".json"),
+            dict(evidence, resume_step="RECHECK_FORM", profile_path=str(runtime / "profiles" / job["domain"])),
+        )
+    if job["mode"] != "live":
+        return
+    if result["outcome"] == "GLOBAL_BLACKLIST":
+        append_global_blacklist(api, job, result)
+        return
+    status = "不适用" if result["outcome"] == "NOT_APPLICABLE" else "需人工核查"
+    outcome = {"project_id": "wyrplay", "status": status, "evidence_code": "", "result_url": ""}
+    write_outcome(
+        api,
+        job["row"],
+        job["backlink_id"],
+        outcome,
+        reason=prior[8] + "\n[Batch] " + result["reason"],
+        summary=prior[9] + "\n" + result["outcome"] + " | " + str(path),
+        expected_prior=prior,
+    )
+
+
+async def prepare_form(page, adapter, pack):
+    await fill_fields(page, adapter, pack)
+    for field, choice in adapter.get("choice_fields", {}).items():
+        value = field_value(
+            pack, choice["confirmed_fact"], required=choice.get("required", False), platform=adapter["domain"]
+        )
+
+        def norm(s):
+            return re.sub(r"[^a-z0-9]", "", s.casefold())
+
+        if isinstance(value, dict) or norm(value) != norm(choice["option_label"]):
+            raise ValueError("OWNER_INPUT_REQUIRED")
+        control = page.locator(choice["control_selector"])
+        if await control.count() != 1 or not choice.get("checked_verified"):
+            raise ValueError("FORM_OR_SELECTOR_CHANGED")
+        if not await control.is_checked():
+            await page.locator(choice["click_selector"]).click(timeout=10000)
+        if not await control.is_checked():
+            raise ValueError("REQUIRED_FIELD_UNCONFIRMED")
+    taxonomy = adapter.get("taxonomy")
+    if taxonomy:
+        if taxonomy.get("category") not in {
+            "Gaming",
+            "Games",
+            "Entertainment",
+            "Party Games",
+            "Social Games",
+            "Web Application",
+        } or not taxonomy.get("selected_verified"):
+            raise ValueError("TAXONOMY_UNVERIFIED")
+        container = page.locator(taxonomy["selected_container_selector"])
+        if taxonomy["selected_text"] not in await container.inner_text():
+            await page.locator(taxonomy["control_selector"]).press(taxonomy["open_key"])
+            option = page.locator(taxonomy["option_selector"]).filter(has_text=taxonomy["option_text"])
+            if await option.count() != 1:
+                raise ValueError("TAXONOMY_SELECTOR_CHANGED")
+            await option.click(timeout=10000)
+        if taxonomy["selected_text"] not in await container.inner_text():
+            raise ValueError("TAXONOMY_UNCONFIRMED")
+    if adapter.get("image_selector"):
+        asset = (pack["root"] / adapter["image_asset"]).resolve()
+        if asset not in [p.resolve() for p in pack["screenshots"]]:
+            raise ValueError("Unapproved image asset")
+        await page.locator(adapter["image_selector"]).set_input_files(str(asset), timeout=10000)
+    if adapter.get("logo_required") and not await page.locator(adapter["logo_selector"]).evaluate(
+        "(e)=>e.files.length>0"
+    ):
+        raise ValueError("REQUIRED_UPLOAD_MISSING")
+    await human_boundary(page)
+    final = page.locator(adapter["final_submit_selector"])
+    if (
+        await final.count() != 1
+        or not await final.is_enabled()
+        or not await final.is_visible()
+        or (await final.inner_text()).strip() != adapter["final_submit_text"]
+    ):
+        raise ValueError("FINAL_ACTION_CHANGED")
+    invalid = await page.locator("input,select,textarea").evaluate_all(
+        "es=>es.filter(e=>e.willValidate&&!e.checkValidity()).map(e=>e.name||e.id||'unknown')"
+    )
+    if invalid:
+        raise ValueError("OWNER_INPUT_REQUIRED")
+    values = await page.locator("input:not([type=password]),select,textarea").evaluate_all(
+        "es=>es.map(e=>e.type==='file'?[...e.files].map(f=>f.name):e.value)"
+    )
+    validate_payload(values)
+
+
+async def execute_ready(page, adapter, pack, api, job):
+    if job["mode"] != "live" or job.get("runtime_approved") is not True:
+        raise ValueError("No runtime Owner LIVE grant")
+    # A copy applies the scoped runtime grant; never modify the committed adapter.
+    gate = adapter_gate(adapter, pack)
+    if gate:
+        raise ValueError(gate["reason"])
+    if not job.get("approval_expires_at") or timestamp(job["approval_expires_at"]) <= timestamp(now()):
+        raise ValueError("Runtime Owner grant expired/missing")
+    runtime_adapter = dict(adapter, automatic_submit_allowed=True)
+    async with sheet_writer(job["runtime_root"]):
+        prior = full_row(api, job["row"])
+        intent = Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")
+        if prior[:2] != ["wyrplay", job["backlink_id"]] or prior[4] not in {"", "0"} or intent.exists():
+            raise ValueError("Joint key/attempt/intent blocks Submit")
+        live_gate = await readonly_ready(page, adapter)
+        if live_gate["outcome"] != "READY_TO_SUBMIT":
+            raise ValueError(live_gate["reason"])
+        if prior[3] != "待提交":
+            if prior[3] != "" and not (job.get("resume") and prior[3] == "需人工核查"):
+                raise ValueError("Existing state blocks Submit")
+            ready = {"project_id": "wyrplay", "status": "待提交", "result_url": "", "evidence_code": ""}
+            write_outcome(
+                api,
+                job["row"],
+                job["backlink_id"],
+                ready,
+                reason=prior[8] + "\n[Batch] LIVE_OWNER_AUTHORIZED_READY",
+                summary=prior[9] + "\nAll current form gates passed; Attempt unchanged",
+                expected_prior=prior,
+            )
+        live_gate = await readonly_ready(page, adapter)
+        if live_gate["outcome"] != "READY_TO_SUBMIT":
+            raise ValueError(live_gate["reason"])
+        if timestamp(job["approval_expires_at"]) <= timestamp(now()):
+            raise ValueError("Runtime Owner grant expired")
+        before_text = (await page.locator("body").inner_text(timeout=10000)).casefold()
+        before_receipts = [marker for marker in RECEIPTS if marker in before_text]
+        result = await run_submission(
+            page,
+            runtime_adapter,
+            pack,
+            api,
+            row=job["row"],
+            backlink_id=job["backlink_id"],
+            runtime=job["runtime_root"],
+            allow_submit=True,
+            blacklisted=False,
+        )
+    return {
+        "outcome": {"成功": "SUCCESS", "审核中": "PENDING"}.get(result["status"], "需人工核查"),
+        "reason": result["reason"],
+        "receipt": result,
+        "before_receipts": before_receipts,
+        "coverage": "approved" if result["evidence_code"] else "deferred",
+    }
+
+
+async def followup_proofs(page, adapter, api, job, *, before_receipts):
+    """Observed URLs only; proof upgrade never increments Attempt a second time."""
+    intent = Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")
+    receipt = json.loads(intent.read_text())
+    if receipt.get("dispatch_confirmed") is not True:
+        return None
+    expected_dispatch = {key: adapter["submission_request"][key] for key in ("method", "host", "path")}
+    if (
+        receipt.get("project_id"),
+        receipt.get("backlink_id"),
+        receipt.get("attempt_increment"),
+        receipt.get("dispatch"),
+    ) != ("wyrplay", job["backlink_id"], 1, expected_dispatch):
+        raise ValueError("Followup proof requires matching persisted dispatch")
+    # Bound observation time; no repeat action and no fabricated email fallback.
+    await page.wait_for_timeout(1000)
+    text = await page.locator("body").inner_text(timeout=10000)
+    proof = (
+        classify("\n".join(before_receipts), text, submitted=True).get("proof")
+        if official_url(page.url, adapter["domain"])
+        else None
+    )
+    tracking = tracking_pending(
+        page.url, text, previous_url=adapter["submit_url"], submitted=True, domain=adapter["domain"]
+    )
+    proof = tracking or proof
+    links = await page.locator("a[href]").evaluate_all("es=>es.map(e=>e.href).filter(x=>/wyrplay/i.test(x))")
+    # Anonymous E4 uses a separate browser, never the authenticated profile.
+    from playwright.async_api import async_playwright
+
+    links = [url for url in links if official_url(url, adapter["domain"])]
+    if links:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(channel="chrome", headless=True)
+            try:
+                for url in list(dict.fromkeys(links))[:3]:
+                    if official_url(url, adapter["domain"]):
+                        public = await verify_listing(browser, url)
+                        if public:
+                            proof = public
+                            break
+            finally:
+                await asyncio.wait_for(browser.close(), 10)
+    if not proof:
+        return None
+    result = (
+        classify("\n".join(before_receipts), " ".join(proof["dom_evidence"]), submitted=True)
+        if proof.get("evidence_code") == "E1"
+        else classify("", "", submitted=True, proof=proof)
+    )
+    if result["status"] not in {"审核中", "成功"}:
+        return None
+    path = save_evidence(Path(job["evidence_dir"]) / "followup-proof.json", proof)
+    async with sheet_writer(job["runtime_root"]):
+        prior = full_row(api, job["row"])
+        if prior[:2] != ["wyrplay", job["backlink_id"]] or prior[4] != "1":
+            raise ValueError("Followup joint key/Attempt changed")
+        if prior[3] == "成功" or prior[3] == "审核中" and result["status"] == "审核中":
+            return None
+        write_outcome(
+            api,
+            job["row"],
+            job["backlink_id"],
+            result,
+            reason=prior[8] + "\n[Batch followup] " + result["reason"],
+            summary=prior[9] + "\n" + result["evidence_code"] + " | " + str(path),
+            expected_prior=prior,
+            attempt_increment=0,
+        )
+    return {
+        "outcome": "SUCCESS" if result["status"] == "成功" else "PENDING",
+        "reason": result["reason"],
+        "receipt": result,
+        "coverage": "approved",
+    }
+
+
+async def run_site(job, pack, api, playwright):
+    prior = full_row(api, job["row"])
+    if prior[:2] != ["wyrplay", job["backlink_id"]] or prior[4] not in {"", "0"}:
+        return {"outcome": "需人工核查", "reason": "FRESH_JOINT_KEY_OR_ATTEMPT_BLOCK", "coverage": "deferred"}
+    if is_blacklisted(api, job["backlink_id"], job["domain"]):
+        return {"outcome": "GLOBAL_BLACKLIST", "reason": "FRESH_BLACKLIST_BLOCK", "coverage": "confirmed_reject"}
+    if prior[3] not in {"", "待提交"} and not (job.get("resume") and prior[3] == "需人工核查"):
+        return {"outcome": "需人工核查", "reason": "PROTECTED_EXISTING_STATUS", "coverage": "deferred"}
+    if (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).exists():
+        return {"outcome": "需人工核查", "reason": "PERSISTENT_SUBMIT_INTENT", "coverage": "deferred"}
+    adapter_path = pack["root"] / "adapters" / (job["domain"] + ".json")
+    if not adapter_path.is_file():
+        return {"outcome": "需人工核查", "reason": "ADAPTER_REQUIRED", "coverage": "unknown"}
+    adapter = json.loads(adapter_path.read_text())
+    if adapter.get("domain") != job["domain"] or adapter.get("submit_url") != job["submit_url"]:
+        return {"outcome": "需人工核查", "reason": "ADAPTER_OFFICIAL_URL_MISMATCH", "coverage": "unknown"}
+    gate = None if adapter.get("assessment") else adapter_gate(adapter, pack)
+    if gate:
+        async with sheet_writer(job["runtime_root"]):
+            record_non_submit(job, gate, api, prior)
+        return dict(gate, coverage="deferred")
+    profile = Path(job["runtime_root"]) / "profiles" / job["domain"]
+    try:
+        async with site_context(playwright, profile) as ctx:
+            if job["mode"] == "dry-run":
+                await ctx.route("**/*", readonly_requests)
+            page = await ctx.new_page()
+            url = adapter.get("assessment", {}).get("source_url", adapter["submit_url"])
+            if not official_url(url, job["domain"]):
+                raise ValueError("Unofficial adapter URL")
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            result = await inspect_page(page, adapter, pack)
+            if (not response or response.status >= 400) and (
+                not result or result["outcome"] != "HUMAN_VERIFICATION_REQUIRED"
+            ):
+                result = {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": "HTTP_UNAVAILABLE_NOT_PERMANENT_PROOF"}
+            elif not result and adapter.get("assessment"):
+                result = assessment_result(
+                    adapter["assessment"], await page.locator("body").inner_text(), domain=job["domain"]
+                )
+            elif not result:
+                if job["mode"] == "dry-run":
+                    # Readonly: field facts, mappings, session and final semantics; LIVE rechecks actual filled DOM.
+                    result = await readonly_ready(page, adapter)
+                else:
+                    await prepare_form(page, adapter, pack)
+                    result = await execute_ready(page, adapter, pack, api, job)
+                    result = (
+                        await followup_proofs(page, adapter, api, job, before_receipts=result["before_receipts"])
+                        or result
+                    )
+                    return result
+            # Context is released before recording a manual task/write.
+    except ValueError as exc:
+        reason = str(exc)
+        allowed = {
+            "HUMAN_VERIFICATION_REQUIRED",
+            "OWNER_INPUT_REQUIRED",
+            "PROFILE_IN_USE",
+            "FORM_OR_SELECTOR_CHANGED",
+            "FINAL_ACTION_CHANGED",
+            "REQUIRED_FIELD_UNCONFIRMED",
+            "TAXONOMY_UNCONFIRMED",
+            "TAXONOMY_SELECTOR_CHANGED",
+            "TAXONOMY_UNVERIFIED",
+            "REQUIRED_UPLOAD_MISSING",
+        }
+        if reason.split(":")[0] not in allowed:
+            raise
+        result = {
+            "outcome": reason if reason in {"HUMAN_VERIFICATION_REQUIRED", "OWNER_INPUT_REQUIRED"} else "需人工核查",
+            "reason": reason.split(":")[0],
+        }
+    async with sheet_writer(job["runtime_root"]):
+        record_non_submit(job, result, api, prior)
+    return dict(
+        result,
+        coverage="approved"
+        if result["outcome"] == "READY_TO_SUBMIT"
+        else "confirmed_reject"
+        if result["outcome"] == "GLOBAL_BLACKLIST"
+        else "deferred"
+        if result["outcome"] != "需人工核查"
+        else "unknown",
+    )
+
+
+async def main(path):
+    job = json.loads(Path(path).read_text())
+    if (
+        job.get("project_id") != "wyrplay"
+        or not re.fullmatch(r"[a-zA-Z0-9_.-]+", job["backlink_id"])
+        or not re.fullmatch(r"[a-z0-9.-]+", job["domain"])
+    ):
+        raise ValueError("Unsafe worker identity")
+    pack = load_project("wyrplay", Path(__file__).resolve().parents[2] / "projects/wyrplay")
+    if job["mode"] not in {"dry-run", "live"} or job["mode"] == "live" and job.get("runtime_approved") is not True:
+        raise ValueError("No scoped runtime approval")
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as pw:
+        result = await run_site(job, pack, service(writable=job["mode"] == "live"), pw)
+    save_evidence(job["result_path"], dict(result, backlink_id=job["backlink_id"]))
+
+
+async def handoff(job, api, playwright):
+    if job.get("owner_human_action") is not True or not job.get("resume"):
+        raise ValueError("Headed browser requires explicit Owner human action for a queued single station")
+    prior = full_row(api, job["row"])
+    if (
+        prior[:2] != ["wyrplay", job["backlink_id"]]
+        or prior[3] not in {"", "待提交", "需人工核查"}
+        or prior[4] not in {"", "0"}
+        or is_blacklisted(api, job["backlink_id"], job["domain"])
+    ):
+        raise ValueError("Protected row cannot open submission handoff")
+    if (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).exists():
+        raise ValueError("Existing submit intent cannot handoff for resubmission")
+    if not official_url(job["submit_url"], job["domain"]):
+        raise ValueError("Handoff URL must be the official verified entry")
+    async with site_context(playwright, Path(job["runtime_root"]) / "profiles" / job["domain"], headed=True) as ctx:
+        # Guard every request to the verified final endpoint, including manually clicked buttons.
+        pack_root = Path(__file__).resolve().parents[2] / "projects/wyrplay"
+        adapter = json.loads((pack_root / "adapters" / (job["domain"] + ".json")).read_text())
+        matcher = adapter["submission_request"]
+
+        from urllib.parse import urlparse
+
+        async def no_submit(route):
+            r = route.request
+            u = urlparse(r.url)
+            if (r.method, u.hostname, u.path) == (matcher["method"], matcher["host"], matcher["path"]):
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await ctx.route("**/*", no_submit)
+        closed = asyncio.Event()
+        ctx.on("close", lambda _: closed.set())
+        page = await ctx.new_page()
+        await page.goto(job["submit_url"], wait_until="domcontentloaded", timeout=20000)
+        print(
+            "Owner human handoff open for "
+            + job["domain"]
+            + "; final dispatch is blocked. Close dedicated window when finished.",
+            flush=True,
+        )
+        await asyncio.wait_for(closed.wait(), 180)
+    return {
+        "outcome": "需人工核查",
+        "reason": "HUMAN_ACTION_FINISHED_RECHECK_REQUIRED",
+        "backlink_id": job["backlink_id"],
+        "submit": 0,
+    }
+
+
+async def readonly_requests(route):
+    if route.request.method not in {"GET", "HEAD", "OPTIONS"}:
+        await route.abort()
+    else:
+        await route.continue_()
+
+
+async def readonly_ready(page, adapter):
+    if adapter.get("login_required") is not False and not adapter.get("authenticated_selector"):
+        return {"outcome": "需人工核查", "reason": "SESSION_PROOF_UNVERIFIED"}
+    final = page.locator(adapter["final_submit_selector"])
+    if (
+        await final.count() != 1
+        or not await final.is_visible()
+        or not await final.is_enabled()
+        or (await final.inner_text()).strip() != adapter["final_submit_text"]
+    ):
+        return {"outcome": "需人工核查", "reason": "FINAL_ACTION_CHANGED"}
+    selectors = list(adapter.get("fields", {}).values())
+    selectors += [c["control_selector"] for c in adapter.get("choice_fields", {}).values()]
+    selectors += [adapter[k] for k in ["logo_selector", "image_selector", "screenshots_selector"] if adapter.get(k)]
+    if adapter.get("taxonomy"):
+        selectors.append(adapter["taxonomy"]["control_selector"])
+    for selector in selectors:
+        if await page.locator(selector).count() != 1:
+            return {"outcome": "需人工核查", "reason": "FORM_OR_SELECTOR_CHANGED"}
+    unknown = await page.locator("input[required],textarea[required],select[required]").evaluate_all(
+        "(es, ss)=>es.filter(e=>!ss.some(s=>e.matches(s))).length", selectors
+    )
+    if unknown:
+        return {
+            "outcome": "OWNER_INPUT_REQUIRED",
+            "reason": "UNMAPPED_REQUIRED_FIELDS",
+            "required_unknown_count": unknown,
+        }
+    return {"outcome": "READY_TO_SUBMIT", "reason": "READONLY_ADAPTER_FORM_GATE_PASSED", "coverage": "approved"}
+
+
+if __name__ == "__main__":
+    asyncio.run(main(sys.argv[1]))

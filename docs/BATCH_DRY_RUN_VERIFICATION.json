@@ -1,0 +1,54 @@
+{
+  "project_id": "wyrplay",
+  "verified_at": "2026-10-08T14:31:59.958686+00:00",
+  "source_main_commit": "05d30d8db29dd7c039d6cd8e0a0f062c77230cec",
+  "validation": {
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "mypy": "PASS",
+    "pytest": "104 passed",
+    "readonly_preflight": "PASS",
+    "batch_dry_run": "PASS"
+  },
+  "dry_run": {
+    "project_id": "wyrplay",
+    "mode": "dry-run",
+    "candidate_total": 19103,
+    "workers_started": 0,
+    "concurrency": 2,
+    "same_domain_max": 1,
+    "coverage": {
+      "approved": 0,
+      "deferred": 13684,
+      "confirmed_reject": 56,
+      "unknown": 5363
+    },
+    "outcomes": {
+      "需人工核查": 5397,
+      "TEMPORARILY_UNAVAILABLE": 13638,
+      "NOT_APPLICABLE": 10,
+      "GLOBAL_BLACKLIST": 56,
+      "SUCCESS": 2
+    },
+    "reasons": {
+      "ADAPTER_REQUIRED": 3464,
+      "OFFICIAL_SUBMIT_URL_UNCONFIRMED": 1885,
+      "HISTORICAL_PLATFORM_EXCLUSION_REVIEW": 13638,
+      "PROTECTED_EXISTING_STATUS": 45,
+      "INVALID_PLATFORM_KEY": 14,
+      "EXISTING_GLOBAL_BLACKLIST": 56,
+      "EXISTING_ATTEMPT_NO_AUTOMATIC_RETRY": 1
+    },
+    "submit": 0,
+    "sheet_writes": 0,
+    "runtime": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/batch-20261008-142826-ef0ac0",
+    "rollout_started": false
+  },
+  "startupfound_row_6249": "Full A:J matches existing production canary readback; unchanged",
+  "project_pack_adapters_canary_state": "UNCHANGED",
+  "new_true_submit": 0,
+  "production_submission_result_writes": 0,
+  "sheet_writes": 0,
+  "live_rollout_started": false,
+  "limits": "Official pool metadata classification only; zero eligible verified adapters to visit. No real batch LIVE execution verified. Unknown records retained; historical exclusions not treated as fresh permanent rejection."
+}
