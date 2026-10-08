@@ -1,0 +1,55 @@
+{
+  "tested_commit": "3baad60d9b619ef144df8eefba9caa3d5eed816c",
+  "origin": "https://github.com/pyxm1618/backlink-submitter.git",
+  "isolated_virtual_environment": true,
+  "source_imported_from_remote_clone": true,
+  "old_runtime_required": false,
+  "external_sheet_credentials_required": true,
+  "lint": "PASS",
+  "format": "PASS",
+  "typecheck": "PASS",
+  "contract_tests": {
+    "passed": 58,
+    "failed": 0
+  },
+  "preflight": {
+    "project_id": "wyrplay",
+    "manifest_version": "3.0-final",
+    "pack": "PASS",
+    "submit": 0,
+    "attempt_increment": 0,
+    "sheet_writes": 0,
+    "functional_canary": "FUNCTIONAL CANARY NOT YET VERIFIED",
+    "ready_for_controlled_rollout": false,
+    "gmail": "OPTIONAL_CONNECTOR; no local OAuth",
+    "sheet": {
+      "spreadsheet_id": "1uUmlPGzjxNe-XkvWfjuC3c5exiOxZuFJWvHqPTwjaTA",
+      "read_at": "2026-10-08T10:20:39.787516+00:00",
+      "project_rows": 19103,
+      "states": {
+        "需人工核查": 32,
+        "待提交": 8,
+        "unknown": 19050,
+        "不适用": 10,
+        "历史未验证": 2,
+        "成功": 1
+      },
+      "master_rows": 31213,
+      "blacklist_rows": 6206,
+      "joint_keys_unique": true,
+      "writes": 0,
+      "submit": 0
+    },
+    "browser": {
+      "headless": true,
+      "service_workers": "block",
+      "http_status": 200,
+      "title": "Would You Rather Questions – Play Free Online",
+      "anonymous": true,
+      "profile_touched": false,
+      "submit": 0
+    }
+  },
+  "fresh_ai_semantic_test": "NOT_RUN; prepared FRESH_WINDOW_TEST.md",
+  "note": "Remote clean-clone execution verified. Fixture Submit/write are local-only; no real platform Submit or Sheet write."
+}

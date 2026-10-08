@@ -26,3 +26,6 @@ reciprocal 人工价值判断、缺字段 Owner 闭环、Human Verification、E1
 本迁移验收用独立干净 clone 重跑以上命令，检查只靠仓库的配置、状态快照和文档即可恢复。
 这验证冷 clone 可运行与信息完备；不是宣称已让独立新 AI 做完语义验收。
 真正 Fresh Window AI 验收使用上述最小 prompt，不提供旧 runtime 或聊天历史。
+
+实际冷 clone 验证回执：`docs/COLD_CLONE_VERIFICATION.json`。独立虚拟环境58测试通过，
+真实三表只读访问及 headless smoke 通过，真实 Submit/Sheet 写入均0。独立新 AI 语义验收尚未运行。
