@@ -1,0 +1,12 @@
+{
+  "project_id": "wyrplay",
+  "canonical_url": "https://www.wyrplay.com/",
+  "public_contact_email": "support@wyrplay.com",
+  "spreadsheet_id": "1uUmlPGzjxNe-XkvWfjuC3c5exiOxZuFJWvHqPTwjaTA",
+  "submission_pack": "WYRPlay_Submission_Pack_FINAL_2026-10-07.zip",
+  "manifest_version": "3.0-final",
+  "manifest": "submission_manifest.json",
+  "policy": {"free_only": true, "automatic_rollout_allowed": false},
+  "current_state": "canary_state.json",
+  "confirmed_facts": "confirmed_facts.json"
+}

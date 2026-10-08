@@ -1,0 +1,30 @@
+﻿Field,Default Value,Policy
+Product / App Name,WYRPlay,Always use
+Website URL,https://www.wyrplay.com/,Always use canonical URL
+Public Contact Email,support@wyrplay.com,Default public-facing email
+Product Type,Web Application / Online Social Game,Use closest destination option
+Platform,Web,Use if requested
+Pricing,Free,Current public product
+AI Product,No,Never classify as AI
+One-line Pitch / Tagline,Play fun and thought-provoking Would You Rather questions with people around the world.,Verified homepage lead; safe default
+SEO / Listing Title,WYRPlay – Would You Rather Questions | Play Free Online,Preferred descriptive listing title
+Short Title,WYRPlay – Would You Rather Questions,Use when title space is tight
+Primary Keyword,would you rather questions,Use naturally; no stuffing
+Secondary Keywords,funny would you rather questions; would you rather questions for kids; hard would you rather questions; would you rather questions for friends; would you rather questions for couples,Use only when relevant
+Short Description,"Free Would You Rather questions with instant play, anonymous voting, and real community results.",96 chars
+Compact Description,"Play free Would You Rather questions for kids, friends, couples, classrooms and parties. Pick A or B, vote anonymously, and compare real community results.",155 chars
+Medium Description,"WYRPlay is a free online Would You Rather game with curated questions for kids, friends, couples, classrooms, parties and more. Players can pick between two choices, vote anonymously, browse question categories, and compare real community results.",247 chars
+Long Description,"WYRPlay is a free online Would You Rather platform for parties, classrooms, families, friends, couples, and road trips. It offers curated kids, funny, hard, friends, and couples question collections. Players can pick A or B, vote anonymously, compare real community results, find questions by category and filters, play online, use presenter-friendly gameplay, and create printable question sets for offline activities. Core play does not require an account, and WYRPlay is a non-AI social product.",498 chars
+Primary Category,Games,Preferred
+Secondary Categories,Entertainment; Party Games; Social Games,Pick closest allowed option
+Contextual Categories,Education; Classroom Tools; Kids & Family; Icebreakers,Only when relevant
+Tags,"Would You Rather, Party Game, Question Game, Icebreaker, Classroom Game, Kids Activities, Conversation Starters, Social Game, Printable Questions",Use supported subset
+Target Audience,"Friends, Families, Kids, Teachers, Classrooms, Couples, Parties",Use when requested
+Operator / Legal Owner,Wang Yufei,Do not relabel as Founder
+Jurisdiction / Country,China,Use only when required
+Founder,,UNKNOWN — do not infer from operator
+Launch Date,,UNKNOWN — manual review if mandatory
+Phone,,UNKNOWN — leave blank if optional
+Street Address,,UNKNOWN — leave blank if optional
+Official Social Links,,UNKNOWN — never reuse another project's accounts
+Demo Video,,UNKNOWN — leave blank if optional

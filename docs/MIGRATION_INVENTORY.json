@@ -1,0 +1,90 @@
+{
+  "source_repo": "BacklinkOS",
+  "base_branch": "main",
+  "base_sha": "b19ab2e32de0868f686a4d4a03b37e598cf8f337",
+  "source_git_status": [
+    "?? scripts/fast_submission_engine.py",
+    "?? scripts/gmail_otp_service.py",
+    "?? scripts/sheet_sync_service.py",
+    "?? tests/test_wyrplay_submission_contract.py"
+  ],
+  "source_files": {
+    "scripts/fast_submission_engine.py": "e994c6f38cc11db742292e6f57effae74ab4775fd300f4c699c38d2064383789",
+    "scripts/sheet_sync_service.py": "338e0e1c2aecdf29717d14eae38306cc5e8a79b70311318df402e92627e69bd9",
+    "scripts/gmail_otp_service.py": "0157951ac0a082fe3c3106c50183f3d94a306183718ea7bc8709083e638f4967",
+    "tests/test_wyrplay_submission_contract.py": "b4c7d46327a8b508c9b479622080c523382c1aeb50337e279b1ef58e08fae73d"
+  },
+  "original_total": 12,
+  "states": {
+    "approved": 6,
+    "deferred": 2,
+    "confirmed_reject": 4,
+    "unreviewed": 0
+  },
+  "items": [
+    {
+      "component": "project pack loader/contamination guard",
+      "state": "approved",
+      "evidence_or_reason": "Identity, checksums, CSV/assets and fail-closed tested"
+    },
+    {
+      "component": "E1 classifier/anonymous E4 verifier",
+      "state": "approved",
+      "evidence_or_reason": "Core predicates migrated; E2/E3 small bounded implementations added and tested"
+    },
+    {
+      "component": "Sheet joint key and exact readback",
+      "state": "approved",
+      "evidence_or_reason": "Preserve raw blank attempts; no legacy retry/cache/master writer"
+    },
+    {
+      "component": "OTP request-bound parser rules",
+      "state": "approved",
+      "evidence_or_reason": "Time/domain/recipient/length retained; connector-fed only, no OAuth"
+    },
+    {
+      "component": "official pack 17 archive entries",
+      "state": "approved",
+      "evidence_or_reason": "All 16 checksummed entries + checksum file preserved byte-for-byte"
+    },
+    {
+      "component": "latest five-site canary semantics",
+      "state": "approved",
+      "evidence_or_reason": "Sanitized state and receipt; no private account/screenshots copied"
+    },
+    {
+      "component": "legacy batch engine/heuristic filling/4workers",
+      "state": "confirmed_reject",
+      "evidence_or_reason": "Observed historical module imports, global state and unverified site submit selector; not needed for bounded contracts"
+    },
+    {
+      "component": "legacy Gmail OAuth refresh/client credentials",
+      "state": "confirmed_reject",
+      "evidence_or_reason": "Second OAuth not authorized; connector is official path"
+    },
+    {
+      "component": "legacy reciprocal automatic exclusions/master cache writer",
+      "state": "confirmed_reject",
+      "evidence_or_reason": "Conflict with final reciprocal policy and uncached composite-key/readback contract"
+    },
+    {
+      "component": "private runtime profiles/snapshots/mail/screenshots",
+      "state": "confirmed_reject",
+      "evidence_or_reason": "Not production source; would expose private sessions or other project data"
+    },
+    {
+      "component": "live True Submit and full post-submit chain",
+      "state": "deferred",
+      "evidence_or_reason": "Not yet verified; preserved as Canary stop, not reported as completed"
+    },
+    {
+      "component": "five platform final-submit adapters",
+      "state": "deferred",
+      "evidence_or_reason": "No final action verified in live run; do not invent selectors"
+    }
+  ],
+  "no_source_mutation": true,
+  "no_other_project_config_migrated": true,
+  "pack_archive_sha256": "4b37188117f1c21274d9df41bb6afe1850c83761e67c1c1e8eddd43beff195d4",
+  "source_current_branch": "codex/wyrplay-submission-minimal-fixes"
+}

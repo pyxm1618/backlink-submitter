@@ -1,0 +1,38 @@
+{
+  "domain": "foundrlist.com",
+  "submit_url": "https://www.foundrlist.com/submit",
+  "verified_at": "2026-10-08",
+  "fields": {
+    "Product / App Name": "input[placeholder=\"e.g. Acme AI\"]",
+    "Website URL": "#submit-website-url",
+    "SEO / Listing Title": "input[placeholder=\"What it does in one sentence\"]",
+    "Medium Description": "textarea[placeholder=\"What it is, who it is for, and how it works\"]"
+  },
+  "required_fields": [
+    "Product / App Name",
+    "Website URL"
+  ],
+  "logo_selector": "#logo-upload",
+  "logo_format": "svg",
+  "screenshots_selector": "#cover-upload",
+  "screenshot_limit": 5,
+  "login_requirement": "GOOGLE_OR_PLATFORM_LOGIN",
+  "automatic_submit_allowed": false,
+  "final_action_verified": false,
+  "free_verified": false,
+  "reciprocal_required": "UNKNOWN_OWNER_REVIEW",
+  "qualification": "MANUAL_REVIEW",
+  "public_email_field": "not_provided_by_platform",
+  "category": "Games",
+  "manual_checks": [
+    "Re-read current selectors before use",
+    "Select Games from platform custom taxonomy",
+    "Confirm lawful community free eligibility OR Owner reciprocal value decision"
+  ],
+  "notes": "Only observed field/upload selectors. 85-char tagline exceeded 60-char field; approved 55-char listing title used verbatim. Join free launch queue is modal only, not final Submit.",
+  "provenance": {
+    "run_id": "20261008-142831-e5175e",
+    "form_snapshot": "form_current.json",
+    "payload_snapshot": "pre_next_payload.json"
+  }
+}

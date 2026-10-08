@@ -1,0 +1,176 @@
+{
+  "schema_version": "3.0-final",
+  "purpose": "WYRPlay external directory / product listing / backlink submission source of truth",
+  "project_guard": {
+    "project_id": "wyrplay",
+    "brand_name": "WYRPlay",
+    "allowed_domains": [
+      "wyrplay.com",
+      "www.wyrplay.com"
+    ],
+    "abort_if_payload_contains": [
+      "Quick I Ching",
+      "quickiching",
+      "quickiching.com",
+      "I Ching",
+      "Book of Changes",
+      "Divination",
+      "Mei Hua",
+      "Yarrow",
+      "Three-Coin"
+    ]
+  },
+  "identity": {
+    "project_id": "wyrplay",
+    "brand_name": "WYRPlay",
+    "canonical_url": "https://www.wyrplay.com/",
+    "canonical_origin": "https://www.wyrplay.com",
+    "public_contact_email": "support@wyrplay.com",
+    "default_language": "English",
+    "product_type": "Web Application / Online Social Game",
+    "platform": "Web",
+    "pricing_current": "Free",
+    "core_use_requires_signup": false,
+    "ai_product": false,
+    "operator_legal_name": "Wang Yufei",
+    "operator_jurisdiction": "China"
+  },
+  "seo": {
+    "homepage_h1": "Would You Rather Questions",
+    "homepage_title_repo": "Would You Rather Questions – Play Free Online",
+    "homepage_meta_description_repo": "Browse fun Would You Rather questions for kids, adults, couples, friends and parties. Pick A or B, play free online, and see real community results.",
+    "listing_title_primary": "WYRPlay – Would You Rather Questions | Play Free Online",
+    "listing_title_short": "WYRPlay – Would You Rather Questions",
+    "primary_keyword": "would you rather questions",
+    "secondary_keywords": [
+      "funny would you rather questions",
+      "would you rather questions for kids",
+      "hard would you rather questions",
+      "would you rather questions for friends",
+      "would you rather questions for couples"
+    ],
+    "contextual_keywords": [
+      "would you rather game",
+      "party game",
+      "icebreaker questions",
+      "classroom icebreakers",
+      "conversation starters",
+      "online question game",
+      "printable would you rather questions",
+      "social game"
+    ],
+    "policy": "Use the primary keyword naturally in the listing title or opening sentence where appropriate. Do not keyword-stuff. Use secondary terms only when relevant to the destination."
+  },
+  "copy": {
+    "tagline_or_one_line_pitch": "Play fun and thought-provoking Would You Rather questions with people around the world.",
+    "description_short_96_chars": "Free Would You Rather questions with instant play, anonymous voting, and real community results.",
+    "description_compact_155_chars": "Play free Would You Rather questions for kids, friends, couples, classrooms and parties. Pick A or B, vote anonymously, and compare real community results.",
+    "description_medium_247_chars": "WYRPlay is a free online Would You Rather game with curated questions for kids, friends, couples, classrooms, parties and more. Players can pick between two choices, vote anonymously, browse question categories, and compare real community results.",
+    "description_long_498_chars": "WYRPlay is a free online Would You Rather platform for parties, classrooms, families, friends, couples, and road trips. It offers curated kids, funny, hard, friends, and couples question collections. Players can pick A or B, vote anonymously, compare real community results, find questions by category and filters, play online, use presenter-friendly gameplay, and create printable question sets for offline activities. Core play does not require an account, and WYRPlay is a non-AI social product."
+  },
+  "classification": {
+    "primary_category": "Games",
+    "preferred_secondary_categories": [
+      "Entertainment",
+      "Party Games",
+      "Social Games"
+    ],
+    "contextual_categories_only_when_relevant": [
+      "Education",
+      "Classroom Tools",
+      "Kids & Family",
+      "Icebreakers"
+    ],
+    "software_directory_fallback": "Web Application",
+    "prohibited_categories": [
+      "AI Tools",
+      "AI Generator",
+      "LLM",
+      "Fortune Telling",
+      "Divination"
+    ]
+  },
+  "tags": [
+    "Would You Rather",
+    "Party Game",
+    "Question Game",
+    "Icebreaker",
+    "Classroom Game",
+    "Kids Activities",
+    "Conversation Starters",
+    "Social Game",
+    "Printable Questions"
+  ],
+  "target_audiences": [
+    "Friends",
+    "Families",
+    "Kids",
+    "Teachers",
+    "Classrooms",
+    "Couples",
+    "Parties"
+  ],
+  "use_cases": [
+    "Parties and game nights",
+    "Classroom icebreakers",
+    "Family activities",
+    "Road trips",
+    "Friends and group conversations",
+    "Couples conversation games",
+    "Printable offline activities"
+  ],
+  "core_features": [
+    "Curated Would You Rather questions",
+    "Free online play",
+    "Anonymous voting",
+    "Real community voting results",
+    "Question categories",
+    "Question finder and filters",
+    "Printable question sets",
+    "Presenter-friendly gameplay"
+  ],
+  "assets": {
+    "logo_png": "assets/logo/wyrplay-logo.png",
+    "logo_svg": "assets/logo/wyrplay-logo.svg",
+    "logo_authority": "User-provided authoritative WYRPlay logo supplied in the current conversation. Do not substitute repository legacy logo variants.",
+    "logo_dimensions_png": "1254x1254",
+    "screenshots": [
+      "assets/screenshots/01-home-1440x900.png",
+      "assets/screenshots/02-play-1440x900.png",
+      "assets/screenshots/03-find-questions-1440x900.png",
+      "assets/screenshots/04-print-1440x900.png",
+      "assets/screenshots/05-leaderboard-1440x900.png"
+    ],
+    "screenshot_provenance": {
+      "repository": "pyxm1618/wyrplay",
+      "branch": "main",
+      "commit_sha": "bed3fe227e6f0462b6cb826291ae2db1430cccd0",
+      "workflow_run_id": 37601613455,
+      "artifact_id": 11473337633,
+      "artifact_name": "ui-responsive-evidence",
+      "date": "2026-10-07"
+    }
+  },
+  "automation_ledger": {
+    "spreadsheet_name": "外链管理总控表",
+    "spreadsheet_id": "1uUmlPGzjxNe-XkvWfjuC3c5exiOxZuFJWvHqPTwjaTA",
+    "project_execution_tab": "外链管理",
+    "platform_master_tab": "外链总表",
+    "blacklist_tab": "黑名单",
+    "project_id_filter": "wyrplay",
+    "target_url": "https://www.wyrplay.com/"
+  },
+  "unknown_do_not_invent": {
+    "founder_name": null,
+    "founded_date": null,
+    "launch_date": null,
+    "phone": null,
+    "street_address": null,
+    "team_size": null,
+    "funding": null,
+    "revenue": null,
+    "official_social_links": null,
+    "product_demo_video_url": null,
+    "app_store_links": null
+  }
+}

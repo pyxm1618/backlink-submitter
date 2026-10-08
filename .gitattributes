@@ -1,0 +1,2 @@
+# Preserve approved CSV bytes/checksum including original CRLF.
+projects/wyrplay/submission_fields.csv -text whitespace=cr-at-eol
