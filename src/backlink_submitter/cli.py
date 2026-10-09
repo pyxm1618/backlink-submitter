@@ -46,6 +46,9 @@ def main():
     parser.add_argument("--owner-approval", type=Path)
     parser.add_argument("--backlink-id")
     parser.add_argument("--owner-human-action", action="store_true")
+    parser.add_argument(
+        "--mail-stdio", action="store_true", help="Use host connected Gmail via ephemeral stdin replies"
+    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     try:
@@ -65,6 +68,11 @@ def main():
                 raise ValueError("Resume/handoff must target one backlink key")
             if args.command == "batch" and args.backlink_id:
                 raise ValueError("Single key belongs to resume/handoff, not arbitrary row selection")
+            connector = None
+            if args.mail_stdio:
+                from .gmail_connector import ConnectedGmail, stdio_invoke
+
+                connector = ConnectedGmail(stdio_invoke)
             report = asyncio.run(
                 run_batch(
                     pack,
@@ -75,6 +83,7 @@ def main():
                     approval=args.owner_approval,
                     resume_key=args.backlink_id,
                     owner_human_action=args.owner_human_action,
+                    connector=connector,
                 )
             )
             print(json.dumps(report, ensure_ascii=False, indent=2))

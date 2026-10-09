@@ -23,24 +23,33 @@ from .sheets import full_row, is_blacklisted, write_outcome
 
 
 async def human_boundary(page):
-    text = (await page.locator("body").inner_text(timeout=10000)).casefold()
-    markers = [
-        "verify you are human",
-        "checking your browser",
-        "verification required",
-        "unusual traffic",
-        "two-step verification",
-        "verify it’s you",
-        "enter your password",
-        "confirm your device",
-    ]
-    challenge = await page.locator('iframe[src*="challenges.cloudflare.com"],iframe[src*="recaptcha"]').count()
-    if challenge or any(marker in text for marker in markers) or await page.locator('input[type="password"]').count():
-        raise ValueError("HUMAN_VERIFICATION_REQUIRED: no bypass/retry")
+    from .automation import owner_boundary
+
+    boundary = await owner_boundary(page)
+    if boundary:
+        raise ValueError(boundary["reason"])
+
+
+async def control_value(control):
+    if await control.evaluate("e=>e.isContentEditable||!['INPUT','SELECT','TEXTAREA'].includes(e.tagName)"):
+        return (await control.inner_text()).strip()
+    return await control.input_value(timeout=10000)
 
 
 async def fill_fields(page, adapter, pack):
     await human_boundary(page)
+    if adapter.get("review_page"):
+        await verify_identity(page, adapter, pack)
+        return {"logo": False, "screenshots": 0}
+    if adapter.get("rich_text_editor") == "hackstack":
+        from .hackstack import fill_form
+
+        return await fill_form(page, pack)
+    if adapter.get("rich_text_editor") == "telegraph":
+        from .publication import fill_publication
+
+        await fill_publication(page, pack)
+        return {"logo": False, "screenshots": 0}
     for field, selector in adapter["fields"].items():
         value = field_value(
             pack, field, required=field in adapter.get("required_fields", []), platform=adapter["domain"]
@@ -72,7 +81,7 @@ async def verify_identity(page, adapter, pack):
         raise ValueError("Required identity mapping missing")
     for field, selector in adapter.get("fields", {}).items():
         if field in {"Product / App Name", "Website URL", "Public Contact Email"}:
-            if await page.locator(selector).input_value(timeout=10000) != pack["fields"][field]:
+            if await control_value(page.locator(selector)) != pack["fields"][field]:
                 raise ValueError("Actual DOM identity mismatch")
     for spec in adapter.get("composed_fields", {}).values():
         expected = composed_value(pack, spec)
@@ -92,7 +101,9 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
     if not adapter.get("free_verified") or adapter.get("reciprocal_required"):
         raise ValueError("Free eligibility/reciprocal Owner decision required")
     host = urlparse(page.url).hostname or ""
-    if host.removeprefix("www.") != domain.removeprefix("www."):
+    if host.removeprefix("www.") != domain.removeprefix("www.") and not host.endswith(
+        "." + domain.removeprefix("www.")
+    ):
         raise ValueError("Page is not the official adapter domain")
     intent_path = Path(runtime) / "submit-intents" / PROJECT / (backlink_id + ".json")
     if intent_path.exists():
@@ -143,6 +154,16 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
             page=page,
             submission_request=adapter.get("submission_request"),
             dispatch_timeout_ms=adapter.get("dispatch_timeout_ms", 30000),
+            before_submit={
+                "url": urlparse(page.url)._replace(query="", fragment="").geturl(),
+                "form_values": [
+                    {"field": field, "value": await control_value(page.locator(selector))}
+                    for field, selector in adapter.get("fields", {}).items()
+                ],
+                "screenshot": str(before_path),
+                "time": started,
+                "platform_id": backlink_id,
+            },
         )
     except ValueError:
         raise  # gate refusal: no submission result exists

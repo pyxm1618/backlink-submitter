@@ -64,7 +64,11 @@ REASONS = {
     "OFFICIAL_PAGE_UNAVAILABLE": "官网当前无法打开或访问超时；稍后重试",
     "WORKER_TIMEOUT": "本站核验超时，浏览器已回收；稍后重试",
     "WORKER_CRASH_OR_INVALID_RESULT": "本站核验异常，浏览器已回收；稍后重试",
-    "HUMAN_WAIT_TIMEOUT": "人工等待已超时，窗口已关闭；可稍后再次处理",
+    "HUMAN_WAIT_TIMEOUT": "人工等待已超时，保持去人工，可稍后继续",
+    "OWNER_PASSWORD_REQUIRED": "需要 Owner 输入密码",
+    "OWNER_2FA_REQUIRED": "需要 Owner 完成短信或 Authenticator 双重验证",
+    "OWNER_DEVICE_CONFIRMATION": "需要 Owner 确认登录设备",
+    "OWNER_RISK_CONFIRMATION": "需要 Owner 完成风险确认",
     "HUMAN_WINDOW_CLOSED": "人工窗口已关闭，仍需单站重新核验",
     "TAXONOMY_UNCONFIRMED": "需要 Owner 确认与本项目相符的实际表单分类",
     "UPLOAD_REQUIREMENTS_UNCONFIRMED": "需要人工核验实际上传格式及尺寸限制",
@@ -174,6 +178,8 @@ def observed_channel(source_url, body, links, fields):
 
 
 def action_result(result, basis=None):
+    from .automation import OWNER_REASONS
+
     r = dict(result)
     outcome, reason = r["outcome"], r["reason"]
     known = {
@@ -188,8 +194,27 @@ def action_result(result, basis=None):
         status = known[outcome]
     elif reason in {"WORKER_TIMEOUT", "WORKER_CRASH_OR_INVALID_RESULT"}:
         status = "暂时不可用"
-    elif outcome in {"HUMAN_VERIFICATION_REQUIRED", "OWNER_INPUT_REQUIRED"} or basis or r.get("channel_confirmed"):
+    elif (
+        reason in OWNER_REASONS
+        or reason
+        in {"CAPTCHA", "OWNER_INPUT_REQUIRED", "RECIPROCAL_REQUIRED", "HUMAN_WAIT_TIMEOUT", "HUMAN_WINDOW_CLOSED"}
+        or (
+            outcome == "OWNER_INPUT_REQUIRED"
+            and reason
+            not in {
+                "UNMAPPED_REQUIRED_FIELDS",
+                "TAXONOMY_UNCONFIRMED",
+                "UPLOAD_REQUIREMENTS_UNCONFIRMED",
+                "REQUIRED_FACT_OR_CONSTRAINT_UNCONFIRMED",
+            }
+        )
+    ):
         status = "去人工"
+    elif reason == "HUMAN_VERIFICATION_REQUIRED":
+        status = "去人工"
+    elif basis or r.get("channel_confirmed") or reason not in {"NO_POSITIVE_CHANNEL_FACT", "UNKNOWN_PLATFORM"}:
+        status = "暂时不可用"
+        r["automation_pending"] = True
     else:
         # Do not turn unexamined sites into rejection or an executable action.
         return dict(
@@ -206,6 +231,8 @@ def action_result(result, basis=None):
         and outcome not in {"HUMAN_VERIFICATION_REQUIRED", "OWNER_INPUT_REQUIRED"}
     ):
         detail = "需要人工准备符合投稿规范的原创文章，并确认编辑收稿方式；内容发布另需 Owner 授权"
+    if status == "暂时不可用" and r.get("automation_pending"):
+        detail = "自动核验尚未完成，保留系统继续处理：" + REASONS.get(reason, "入口、表单或认证证据待系统核验")
     if status == "待提交":
         detail = "平台、资料、最终动作和提交请求均已核验；执行仍需 Owner 授权"
     if status in {"成功", "审核中"}:
@@ -218,5 +245,9 @@ def action_result(result, basis=None):
         r,
         action_status=status,
         action_reason=detail,
-        coverage="approved" if status == "待提交" else "confirmed_reject" if status == "全局黑名单" else "deferred",
+        coverage="approved"
+        if status in {"待提交", "成功", "审核中"}
+        else "confirmed_reject"
+        if status in {"全局黑名单", "不适用"}
+        else "deferred",
     )

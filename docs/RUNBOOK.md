@@ -25,9 +25,9 @@ Gmail 已连接 connector 优先；Profile + 无副作用 search + 时间/发件
 
 ## 资格与渠道
 
-先用三张表和正向发布渠道证据预筛，不访问整个 19k unknown 池。全量域名池不等于可提交候选池。只有被 Owner 批准范围才做现场核验。
+正式工作队列来自 WYRPlay 外链管理实际行顺序，三表联合核查保护条件。总表渠道资料只加速，缺资料仍进入有界Discovery；不再以688池作为边界。每轮只执行Owner明确范围，不立刻重跑整个19k。
 真实官网、正确官方入口、类型适合、免费可用、质量正常才能 QUALIFIED。
-登录不是淘汰；人类验证是执行阻碍；未确认免费/类别则人工核查。
+普通登录/OAuth/邮箱验证先自动处理；只有真实密码、CAPTCHA、2FA、设备/风险确认或Owner业务/授权决定去人工。技术证据未完成保留系统暂缓，不丢给Owner。
 A/B/C 用简单相关性与质量判断，不打百分分数。
 
 支持渠道分类：
@@ -35,7 +35,7 @@ PRODUCT_DIRECTORY、STARTUP_DIRECTORY、SOFTWARE_DIRECTORY、GENERAL_DIRECTORY�
 CONTENT_SUBMISSION、GUEST_POST、BLOG_PUBLISHING、COMMUNITY_PUBLISHING、RECIPROCAL_LINK。
 内容/博客/Guest Post 是研究价值，不因不是 Submit Product 而全局淘汰。
 普通评论、垃圾回帖、搜索、newsletter、随机 contact/问卷不是产品收录。
-内容发布必须是官方允许渠道、相关原创价值且有单独 Owner 授权；本仓库不自动执行这些动作。
+内容发布必须是官方允许渠道、使用确认资料且有 Owner 授权；本次十站范围内 Telegraph 已真实执行。
 Google Form 必须官网明示作为收录入口。
 
 换链标 `RECIPROCAL_REQUIRED` 等待 Owner 价值判断。
@@ -73,7 +73,7 @@ OAuth -> onboarding -> form -> upload -> final action 连续性；不要中间�
 人工步骤由 Owner 完成，最终提交 endpoint 被拦截；随后 `resume` 重新核验，不能自动绕过挑战。
 导航20s、元素10s、提交响应30s，单站90s；需 OTP 最多额外180s。
 关闭 page/context 用 timeout；失败销毁 worker，不能无限堆页。小批 concurrency2、同域1，
-只有 live Canary 通过才可最多4。最小 batch runner 已实现，见 `BATCH_RUNNER.md`；本轮未授权 LIVE rollout。
+只有 live Canary 通过才可最多4。最小 batch runner 已实现，见 `BATCH_RUNNER.md`；当前十站 LIVE 已授权并完成尝试；不得自动扩大范围。
 
 ## 精准填写与最终 Submit
 

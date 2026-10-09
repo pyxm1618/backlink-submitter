@@ -77,8 +77,12 @@ def official_url(url, domain):
     return (
         p.scheme == "https"
         and p.hostname
-        and p.hostname.removeprefix("www.") == domain.removeprefix("www.")
-        and not (p.query or p.fragment or p.username or p.password)
+        and (
+            p.hostname.removeprefix("www.") == domain.removeprefix("www.")
+            or p.hostname.endswith("." + domain.removeprefix("www."))
+        )
+        and not (p.username or p.password)
+        and not re.search(r"(?:^|&)(?:code|token|state|access_token|id_token|session|otp|password)=", p.query, re.I)
     )
 
 
@@ -129,7 +133,11 @@ def select_candidates(snapshot, runtime):
         }
         if key in blocked_keys or domain in blocked_domains:
             item.update(outcome="GLOBAL_BLACKLIST", reason="EXISTING_GLOBAL_BLACKLIST", coverage="confirmed_reject")
-        elif row[3] not in {"", "待提交"}:
+        elif (
+            row[3] in {"成功", "审核中", "历史未验证"}
+            or row[7]
+            or re.search(r"SUBMIT_(?:RESULT|DISPATCH)_UNCONFIRMED", row[8])
+        ):
             item.update(
                 outcome={"成功": "SUCCESS", "审核中": "PENDING", "不适用": "NOT_APPLICABLE"}.get(row[3], "需人工核查"),
                 reason="PROTECTED_EXISTING_STATUS",
@@ -141,12 +149,6 @@ def select_candidates(snapshot, runtime):
             item.update(reason="INVALID_PLATFORM_KEY", coverage="unknown", submit_url="")
         elif (Path(runtime) / "submit-intents/wyrplay" / (key + ".json")).exists():
             item.update(reason="PERSISTENT_SUBMIT_INTENT", coverage="deferred")
-        elif m[5] in {"失效", "已排除", "不适用"} or m[14] in {"失效", "已排除", "不适用"}:
-            item.update(
-                outcome="TEMPORARILY_UNAVAILABLE", reason="HISTORICAL_PLATFORM_EXCLUSION_REVIEW", coverage="deferred"
-            )
-        elif not item["channel_basis"]:
-            item.update(reason="NO_POSITIVE_CHANNEL_FACT", coverage="unknown", submit_url="")
         elif not official_url(m[2], domain):
             item.update(process=True, reason="REQUIRES_OFFICIAL_ENTRY_DISCOVERY", submit_url="")
         else:
@@ -160,19 +162,26 @@ def select_candidates(snapshot, runtime):
             {
                 "project_id": "wyrplay",
                 "backlink_id": key,
-                "domain": row[2],
+                "domain": row[2].lower().removeprefix("www."),
                 "row": number,
                 "master_row": None,
                 "submit_url": "",
                 "prior_status": row[3],
                 "prior_attempt": row[4],
-                "process": False,
+                "process": row[3] not in {"成功", "审核中", "历史未验证"}
+                and row[4] in {"", "0"}
+                and not row[7]
+                and not (Path(runtime) / "submit-intents/wyrplay" / (key + ".json")).exists()
+                and key not in blocked_keys
+                and row[2].lower().removeprefix("www.") not in blocked_domains
+                and bool(re.fullmatch(r"[a-zA-Z0-9_.-]+", key))
+                and bool(re.fullmatch(r"[a-z0-9.-]+", row[2])),
                 "outcome": "需人工核查",
-                "reason": "MASTER_FACTS_MISSING",
+                "reason": "REQUIRES_OFFICIAL_ENTRY_DISCOVERY",
                 "coverage": "unknown",
             }
         )
-    return candidates
+    return sorted(candidates, key=lambda item: item["row"])
 
 
 def adapter_gate(adapter, pack):
@@ -191,11 +200,12 @@ def adapter_gate(adapter, pack):
         if field not in adapter.get("fields", {}) and field not in adapter.get("choice_fields", {}):
             return {"outcome": "需人工核查", "reason": "REQUIRED_FIELD_MAPPING_UNVERIFIED"}
     matcher = adapter.get("submission_request", {})
-    if not matcher.get("verified"):
-        return {"outcome": "需人工核查", "reason": "DISPATCH_MATCHER_UNVERIFIED"}
-    validate_dispatch_metadata({k: matcher.get(k) for k in ("method", "host", "path")})
-    if matcher["host"].removeprefix("www.") != adapter["domain"].removeprefix("www."):
-        raise ValueError("Dispatch matcher is not platform host")
+    if matcher:
+        if not matcher.get("verified"):
+            return {"outcome": "需人工核查", "reason": "DISPATCH_MATCHER_UNVERIFIED"}
+        validate_dispatch_metadata({k: matcher.get(k) for k in ("method", "host", "path")})
+        if matcher["host"].removeprefix("www.") != adapter["domain"].removeprefix("www."):
+            raise ValueError("Dispatch matcher is not platform host")
     if not all(
         adapter.get(k) for k in ["free_verified", "final_action_verified", "final_submit_selector", "final_submit_text"]
     ):
@@ -447,6 +457,7 @@ async def run_batch(
     approval=None,
     resume_key=None,
     owner_human_action=False,
+    connector=None,
 ):
     import fcntl
     import secrets
@@ -517,12 +528,46 @@ async def run_batch(
                 file=sys.stderr,
                 flush=True,
             )
-        worker_results = await run_pool(
-            jobs,
-            runtime=directory / "workers",
-            concurrency=1 if mode == "handoff" else concurrency,
-            timeout=210 if mode == "handoff" else 90,
-        )
+        if connector is not None:
+            if mode != "live" or concurrency != 1:
+                raise ValueError("Host mailbox execution is serial LIVE only")
+            from playwright.async_api import async_playwright
+
+            from .batch_worker import run_site
+
+            worker_results = []
+            async with async_playwright() as playwright:
+                for job in jobs:
+                    try:
+                        result = await asyncio.wait_for(run_site(job, pack, api, playwright, connector=connector), 270)
+                    except Exception as exc:
+                        result = {
+                            "outcome": "TEMPORARILY_UNAVAILABLE",
+                            "reason": "WORKER_TIMEOUT"
+                            if isinstance(exc, TimeoutError)
+                            else "WORKER_CRASH_OR_INVALID_RESULT",
+                            "error_type": type(exc).__name__,
+                            "coverage": "deferred",
+                        }
+                    result["backlink_id"] = job["backlink_id"]
+                    worker_results.append(result)
+                    print(
+                        json.dumps(
+                            {
+                                "site_finished": job["backlink_id"],
+                                "outcome": result["outcome"],
+                                "reason": result["reason"],
+                            }
+                        ),
+                        flush=True,
+                    )
+        else:
+            worker_results = await run_pool(
+                jobs,
+                runtime=directory / "workers",
+                concurrency=1 if mode == "handoff" else concurrency,
+                timeout=210 if mode == "handoff" else 90,
+            )
         from .candidates import action_result
 
         for i, result in enumerate(worker_results):
@@ -549,18 +594,30 @@ async def run_batch(
             "mode": mode,
             "candidate_total": original_total,
             "workers_started": len(jobs),
-            "positive_pool_total": sum(bool(x.get("channel_basis")) and x["process"] for x in candidates),
+            "channel_hint_total": sum(bool(x.get("channel_basis")) for x in candidates),
+            "processable_queue_total": sum(x["process"] for x in candidates),
+            "queue_order": "外链管理实际行顺序",
             "window_actions": dict(Counter(x.get("action_status") or "未核验" for x in worker_results)),
+            "automatic_progress": {
+                k: sum(x.get(k, 0) for x in worker_results)
+                for k in ["automatic_login", "automatic_oauth", "automatic_email_verification", "automatic_steps"]
+            },
+            "automation_pending": sum(bool(x.get("automation_pending")) for x in worker_results),
             "concurrency": 1 if mode == "handoff" else concurrency,
             "same_domain_max": 1,
             "observed_browser_max": maximum,
             "browser_intervals_recorded": len(browser_events) // 2,
             "worker_groups_reclaimed": True,
             "window_outcomes": dict(Counter(x["outcome"] for x in worker_results)),
-            "window_reasons": dict(Counter(x["reason"] for x in worker_results)),
+            "window_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in Counter(x["reason"] for x in worker_results).items()
+            ],
             "coverage": coverage_report(results),
             "outcomes": dict(Counter(x["outcome"] for x in results)),
-            "reasons": dict(Counter(x["reason"] for x in results)),
+            "reasons": [
+                {"reason": reason, "count": count} for reason, count in Counter(x["reason"] for x in results).items()
+            ],
             "submit": 0 if mode != "live" else "See protected per-key receipts",
             "sheet_writes": 0 if mode != "live" else "See precise readback evidence",
             "runtime": str(directory),

@@ -98,7 +98,10 @@ def test_unknown_required_is_owner_input(tmp_path, extra, expected):
 )
 def test_human_login_classification(tmp_path, html, reason):
     result, _ = asyncio.run(fixture_discover(tmp_path, html))
-    assert result["outcome"] == "HUMAN_VERIFICATION_REQUIRED" and result["reason"] == reason
+    if reason == "HUMAN_VERIFICATION_REQUIRED":
+        assert result["outcome"] == "HUMAN_VERIFICATION_REQUIRED" and result["reason"] == reason
+    else:
+        assert result["outcome"] != "HUMAN_VERIFICATION_REQUIRED"
 
 
 @pytest.mark.parametrize(
@@ -142,7 +145,8 @@ def test_existing_adapter_never_overwritten(tmp_path):
 def test_discovery_blocks_page_write_requests(tmp_path):
     script = """<script>for(const method of ['POST','PUT','PATCH','DELETE'])fetch('/probe',{method}).catch(()=>{});</script>"""
     result, requests = asyncio.run(fixture_discover(tmp_path, FORM + script))
-    assert result["reason"] == "DISPATCH_MATCHER_UNVERIFIED"
+    assert result["outcome"] == "READY_TO_SUBMIT"  # native action proved; unrelated probe script cannot veto it
+    assert result["blocked_business_writes"] == 4
     assert all(method == "GET" for method, _ in requests)
 
 

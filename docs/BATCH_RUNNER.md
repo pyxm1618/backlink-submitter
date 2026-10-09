@@ -1,25 +1,18 @@
 # WYRPlay batch runner
 
-本轮仅实现并验证能力；CONTROLLED ROLLOUT NOT STARTED。Google Sheet 仍为唯一正式账本。
+已完成当前授权十站实际尝试；结果见 LIVE_10_VERIFICATION.md。未开启下一批。Google Sheet 为唯一正式账本。
 
 ## 候选顺序与分流
 
 读取正式外链总表 A:R、黑名单 A:R、外链管理 A:J，严格核对表头、平台键和 WYRPlay 联合键。
-按外链总表实际行顺序关联现有 WYRPlay 行；缺失总表事实的行在末尾保留 unknown，不自动建行。
-重复键/不一致配置 fail closed。每次运行和正式写入都刷新 Sheet。
-
-先跳过黑名单、成功/审核中/历史未验证/需人工核查/去人工/暂时不可用等已有状态、非零 Attempt、persistent intent。
-历史总表“失效/已排除”只进入待复核，不能因旧 timeout 判永久失效或新增黑名单。
-浏览器前必须有可追溯的正向渠道依据：总表的官方发布入口、明确目录/社区/内容发布类型，
-或同时具备免费事实、验证时间与官方来源 URL 的平台渠道事实。首页、login/register、
-“实测免费”本身、旧“自动提交成功”及无官方来源的笼统“发现投稿通道”均不够。
-已知评论/订阅 endpoint 不作为发布渠道。该预筛只决定是否进入浏览器，不删原记录、不把未知改为拒绝。
-只读取 WYRPlay 执行行；不使用 Quick I Ching 的状态、Attempt、payload 或提交结果。
-没有 adapter 的合格候选才进入只读 Discovery；入口缺失时只从官网与观察到的同域链接寻找。
-不能确认入口/字段/资格/matcher 的记录保留 unknown 或对应明确阻碍；不猜路径或 selector。
-按预筛后的正式候选池顺序推进，`--limit 50` 表示前50个可处理候选，无需人工挑选平台。
-`--start-after KEY` 和 `--limit N` 可限定本轮执行窗口；未处理记录保留 deferred/unknown。
-报告同时保留 approved/deferred/confirmed_reject/unknown，original total=sum(states)。
+按外链管理实际行顺序推进 WYRPlay 现有记录；总表以平台键关联，只提供入口/类型/事实加速信息。
+缺总表、缺渠道依据、旧“失效/排除”、旧人工/临时状态不会单独阻止 Discovery。
+成功、审核中、历史未验证、非零 Attempt、persistent intent、已有结果/提交不确定证据和确认黑名单仍保护；
+不合法键在输入边界保留 unknown，不能猜域名或转换为拒绝。Quick I Ching 的执行资料完全不参与。
+`channel_basis` 仅提示，不再是硬门槛，也没有“688个”执行边界；正式工作队列是全部WYRPlay记录。
+`--limit 10` 从未保护记录按正式执行表顺序取连续10项，不人工选择；本次仅十站。
+入口缺失也从官网及观察到的官方导航开始，逐站有界核验，不猜 URL。
+报告保留 approved/deferred/confirmed_reject/unknown，原总数始终等于所有显式状态之和。
 
 ## 两种模式
 
@@ -55,41 +48,20 @@ LIVE 授权在启动时以 `.used` 标记消耗，每个最终动作再次检查
 保持提交 adapter 的 `automatic_submit_allowed=false`；授权仅施加到内存副本。
 已有成功 StartupFound 和历史 Attempt 行永远不因批量运行重投。
 
-## 只读 Discovery
+## 现场 Discovery 与首次 Submit
 
-Discovery 复用每站 worker、90秒截止和 context finally，不新增浏览器常驻池。
-优先读取总表同域 HTTPS 提交入口，缺失/不可达时回到官方主页；最多5个页面，只追踪真实
-观察到的 Submit/Add product/Launch/Contribute 等同域链接。跨域主页面导航和全部写方法被拦截。
-公开 JS 仅 GET 观察到的官方 script URL，不猜 bundle 路径，不追踪 API GET 的重定向。
+DRY RUN 保留只读诊断，不构成授权。LIVE 跟随观察到的同域入口与正常认证链接，在当前
+context 读取并填写 label/name/placeholder/aria/fieldset/legend、普通条款与可满足的官方上传。
+普通登录/OAuth、邮件验证、Next/Continue 属于自动步骤，技术未完成保留系统暂缓。
+新账号确认密码页面可请求 host 内存凭据；已有主账号密码与 CAPTCHA/2FA 等仍为 Owner 边界。
 
-表单语义来自 label/name/placeholder/aria 和实际 options；仅使用唯一稳定属性 selector。
-WYRPlay identity 来自原3.0-final，必填未知或选择/上传规则无法确认则 OWNER_INPUT_REQUIRED/人工核查。
-当前自动生成范围为明确的产品表单、原生单选 taxonomy，以及可证实的匿名免费适配规则；
-复杂 choice/widget/upload 条件与复杂 SPA handler 保留待审，不能为扩大 READY 数量猜测。
-原生 matcher 要求明确 POST/action 且无可能覆盖提交的脚本/inline handler/按钮 action override。
-JS matcher 只接受唯一、完整可证明的 observed-form submit listener，preventDefault 和唯一 literal
-fetch method/host/path；通用 bundle 中出现 endpoint 字符串不构成 handler 绑定证据。
+第一次最终 Submit 不要求 verified matcher 或事前 handler endpoint 证明。现场确认 WYRPlay
+真实值、必填、免费路径、联合键和授权后，写单次 intent 并监听实际 POST/PUT/PATCH。
+只记录 method/host/path，不保存 body/token/password；无法确认派发时 Attempt 不增加且禁止再点。
+已存在 adapter/matcher 保留为诊断和历史合同；LIVE 使用本次页面事实，既有成功永远不重投。
 
-只有 adapter_gate 和当前 readonly_ready 均通过才原子生成新 adapter，包含官方来源、字段、
-最终动作、dispatch、安全摘要与时间 provenance；已有 adapter 不覆盖，不调用 git。
-生成后 DRY RUN 返回 READY；未来经 Owner 新授权的 LIVE 会释放 Discovery context，再进入原有
-worker 的真实填写、fresh Sheet/黑名单/intent/授权检查以及 run_submission，不能直接 Submit。
-分类原因 OFFICIAL_SUBMIT_URL_UNCONFIRMED、DISPATCH_MATCHER_UNVERIFIED、ADAPTER_REVIEW_REQUIRED
-仅保留内部诊断；存在已记录发布渠道但不能自动执行时，Owner 行动状态为“去人工”，原因/备注用中文说明。不新增平行状态数据库。AI-only 仅项目不适用；全球淘汰必须命中明确
-官方完整政策声明，普通付费价格、超时/404/无法查明均不能推断全球淘汰。
-
-## Adapter 边界
-
-复用已有 fields、required_fields、choice_fields、taxonomy、upload、qualification、free_verified、
-final_action_verified 和 verified submission_request。batch 另需真实验证的 `final_submit_text`，
-并提供 `authenticated_selector` 证明平台 session，或已验证的 `login_required=false`。
-未核验这些执行条件就保持需人工核查，不猜 selector、不修改现有 adapter。
-
-平台不适用/全局问题可由 adapter `assessment` 记录已核验的 outcome、reason、官方 source_url、
-checked_at 和明确 marker；执行时重新读取该官方页面，marker 变化立即停止。
-NOT_APPLICABLE 只写 WYRPlay“不适用”。GLOBAL_BLACKLIST 只接受 SPAM/PBN/MALICIOUS/
-PERMANENTLY_UNAVAILABLE/PAYMENT_ONLY/NO_EXTERNAL_LINK_CHANNEL 的正证据，精确追加并回读
-黑名单 A:R，不删除项目行。AI-only/登录/CAPTCHA/缺资料/单次网络错误不能进全局黑名单。
+E1–E4 继续用于结果确认，普通价格、超时、404、未知或项目不相关均不能推出全局黑名单。
+NOT_APPLICABLE 只影响 WYRPlay；全局淘汰必须有明确官方正面证据并精确回读。
 
 ## 资源与人工恢复
 
@@ -154,32 +126,54 @@ E2 仍需已连接 Gmail connector 提供本次绑定的正式邮件，经 email
 复用 adapter 时在新 context 中重新展开、检查字段、免费条款与 handler；变化后停止。
 adapter 的 `automatic_submit_allowed=false`，仍须独立 Owner LIVE 授权及全部既有提交合同。
 
-## 中文动作与人工循环
+## 自动认证与中文动作
 
-正式非提交核验显示“待提交 / 去人工 / 不适用 / 暂时不可用”；成功与审核中仍完全依赖原 E1–E4。
-待提交只来自全部现有 adapter/readiness 门槛通过。需登录、人工验证、真实缺字段、复杂表单/
-不明最终请求进入去人工；不适用须项目级正证据，黑名单须既有严格平台级证据。
-无正向渠道事实的全量池记录保留 unreviewed，不写成不适用或黑名单，也不进入浏览器。
-内部英文原因码仍在 runtime evidence，中文动作不是新提交授权，更不抹去证据不确定性。
-未确认 dispatch/提交结果的原 Submit 合同、需人工核查和 persistent intent 保持不变，禁止重投。
+只有实际 CAPTCHA/密码输入/短信或 Authenticator 2FA/设备/风险确认，以及真实缺失的业务事实或授权决定才去人工。
+普通登录先复用每站persistent profile，跟随实际登录/Google入口，放行页面已绑定的auth-only请求；
+真实Google流程可在初始context关闭后重试现有Owner专用profile，不导出cookie，不同时占用两个context。
+Owner已打开/其他worker正使用专用profile时保持系统暂缓，不删锁、不杀Owner浏览器。
+登录成功计数必须见到离开认证界面回到本平台；进入OAuth/点击按钮不等于完成登录。
 
-Owner 明确处理时启动顺序循环（默认一站，可给出本次最多处理数量）：
+认证网络保护按阶段执行：AUTH/VERIFICATION只放行DOM绑定的认证action及其认证字段，
+观察到且redirect_uri绑定当前平台的Google流程才允许Google认证请求。
+最终已验证业务endpoint持续阻断；无matcher也不能开放任意POST。
+DISCOVERY/FINAL_SUBMIT在本轮只读模式阻断业务写请求。真实Final仍由原引擎、Owner独立授权控制。
+
+Gmail仅用现有connector读接口：账户、收件人、官方发送域、发起时间、邮件语义、唯一OTP或同域magic link同时匹配。
+验证码/链接仅在MemorySecret与浏览器内存中，不写Sheet/evidence/log，不建立新OAuth。
+`ConnectedGmail`供能调用既有连接工具的hosting caller注入`discover(..., connector=...)`；
+默认独立 worker 没有 Codex connector；`--mail-stdio` 已提供 hosting AI → 已连接工具 → stdin 内存回复传输。
+本轮真实 profile/search 及 host→CLI 往返已验证；未注入/连接故障仍返回 GMAIL_CONNECTOR_UNAVAILABLE。
+本轮没有真实 OTP/magic link 完成案例，不能用接口或 fixture 通过替代该验证。
+
+Next/Continue/Review只在唯一可见控件时有界推进；授权 LIVE 的 FORM_STEP 放行同平台普通下一步请求。
+这些标签不替代最终提交意图与单次点击保护；只读运行仍阻断写请求。
+字段识别包含label/name/id/placeholder/aria及现场fieldset/legend/options元数据；Email星号标签可确定映射正式邮箱。
+没有taxonomy控制时不强制taxonomy；存在时仍保留真实选项与非AI合同。
+matcher增加CDP实际绑定submit监听器/React onSubmit及fetch/XHR正证据；无override的native action可接受，
+无绑定的 bundle 字符串不构成 matcher；最终 Submit 采用当前授权与页面事实，真实首提监听派发。
+
+技术未完成、无法证明selector/matcher、多步骤请求/认证绑定不明，不算Owner人工动作。
+本轮用“暂时不可用 | 自动核验尚未完成，保留系统继续处理”明确区分系统暂缓与站点故障；
+内部automation_pending与具体reason保留，不冒充不适用/黑名单，也不冒充READY。
+原提交派发/结果不确定的需人工核查、安全intent及E1–E4合同不变，不能自动重投。
+
+## 人工循环
 
 ```bash
 .venv/bin/backlink-submitter human-loop --project wyrplay --owner-human-action --limit 5
 ```
 
-队列由正式 Sheet 的“去人工”状态及总表顺序决定；runtime hint 只提供安全恢复 URL/profile。
-缺 hint 的行仍去人工，提示先单站核验；不创建另一套正式任务数据库。
-一次仅一个 dedicated headed browser，每5秒检查验证，最长10分钟。超时/关闭保持去人工，
-context 关闭与 worker 进程组回收完成后才进入下一站。没有 Owner 明确命令不会抢桌面焦点。
-已验证 matcher 的最终 endpoint 所有方法都拦截；无已验证 matcher 时整个窗口只读，
-依赖 POST 的登录也不能放行，保留去人工等待单站 matcher 核验，不猜哪个 POST 是登录。
-Owner 完成验证后，关闭 headed，再交现有 headless 单站链重新核验所有门槛。
-循环不写提交结果、不执行 Submit；既有 headless 链确认 READY 后，使用原 protected writer
-将该行从去人工更新为待提交，Attempt 不变，每次核对联合键并完整 A:J 回读。超时仍去人工。
-返回单站 resume 指引；其余未通过项保留去人工，不靠新数据库推进队列。
-真正继续提交仍需独立、单次、范围明确的 Owner LIVE grant；不能因人工循环通过而自动消费提交授权。
-人工循环编排已由测试验证；没有声称未知 matcher 平台或真实 Owner 登录闭环已生产验证。
+正式Sheet去人工行先交headless链重新核验，旧“普通登录/复杂表单”不直接弹窗；
+只有此次实际确认的Owner边界才打开该单站dedicated headed browser。
+每5秒核验、最多10分钟、串行一窗口；超时/关闭释放context与worker。
+窗口只允许页面证据已绑定的认证请求，已知最终业务endpoint先于DOM检查阻断，未知业务POST不放行。
+Owner完成验证后关闭headed，现有headless链重新核验；READY才由原protected writer更新该行动状态，Attempt不变。
+这不是Submit授权；当前十站已打开一个 ebool 人工窗口并正式回写；该窗口等候结束，新账号密码随后由 Owner 授权自动填入。
+CAPTCHA厂商未被页面绑定的必要POST同样不会猜着开放；仍需在独立验证中证明 transport，不能声称所有挑战均可恢复。
 
-暂时不可用不会在普通批次自动重试。保留已观察到的安全恢复提示，Owner 可显式指定单站 `resume --mode dry-run` 重新核验；非零 Attempt/intent/成功/审核中仍禁止恢复提交。只有新的单站 LIVE grant 才允许恢复后的真实 Submit。
+## Host 已连接能力
+
+`--mail-stdio` 使用当前执行 AI 已连接 Gmail。CLI 发出安全操作名/参数，host 调用已有工具并通过
+无回显 stdin 回传；邮箱正文、OTP、magic link 与新账号凭据只驻留内存，不建立第二套 OAuth。
+新账号凭据需要 Owner 已给出的明确值，系统不生成或猜测；普通已有登录不会套用新账号密码。

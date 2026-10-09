@@ -149,6 +149,8 @@ def record_non_submit(job, result, api, prior):
 
 async def prepare_form(page, adapter, pack):
     await fill_fields(page, adapter, pack)
+    for selector in adapter.get("ordinary_checkboxes", []):
+        await page.locator(selector).check(timeout=10000)
     for field, choice in adapter.get("choice_fields", {}).items():
         value = field_value(
             pack, choice["confirmed_fact"], required=choice.get("required", False), platform=adapter["domain"]
@@ -247,7 +249,7 @@ async def execute_ready(page, adapter, pack, api, job):
         if live_gate["outcome"] != "READY_TO_SUBMIT":
             raise ValueError(live_gate["reason"])
         if prior[3] != "待提交":
-            if prior[3] != "" and not (job.get("resume") and prior[3] in {"需人工核查", "去人工", "暂时不可用"}):
+            if prior[3] in {"成功", "审核中", "历史未验证"} or prior[7]:
                 raise ValueError("Existing state blocks Submit")
             ready = {"project_id": "wyrplay", "status": "待提交", "result_url": "", "evidence_code": ""}
             write_outcome(
@@ -292,7 +294,11 @@ async def followup_proofs(page, adapter, api, job, *, before_receipts):
     receipt = json.loads(intent.read_text())
     if receipt.get("dispatch_confirmed") is not True:
         return None
-    expected_dispatch = {key: adapter["submission_request"][key] for key in ("method", "host", "path")}
+    expected_dispatch = (
+        {key: adapter["submission_request"][key] for key in ("method", "host", "path")}
+        if adapter.get("submission_request")
+        else receipt["dispatch"]
+    )
     if (
         receipt.get("project_id"),
         receipt.get("backlink_id"),
@@ -317,6 +323,8 @@ async def followup_proofs(page, adapter, api, job, *, before_receipts):
     from playwright.async_api import async_playwright
 
     links = [url for url in links if official_url(url, adapter["domain"])]
+    if official_url(page.url, adapter["domain"]) and page.url != adapter["submit_url"]:
+        links.insert(0, page.url)
     if links:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(channel="chrome", headless=True)
@@ -363,18 +371,94 @@ async def followup_proofs(page, adapter, api, job, *, before_receipts):
     }
 
 
-async def run_site(job, pack, api, playwright):
+async def run_live_discovery(job, pack, api, playwright, prior, *, connector=None):
+    """Keep the same session from discovery through its single final action."""
+    from .discovery import discover
+
+    async def submit(page, adapter):
+        await prepare_form(page, adapter, pack)
+        result = await execute_ready(page, adapter, pack, api, dict(job, submit_url=page.url))
+        final = await followup_proofs(page, adapter, api, job, before_receipts=result["before_receipts"]) or result
+        intent = json.loads(
+            (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).read_text()
+        )
+        return dict(
+            final,
+            filled_fields=list(adapter["fields"]),
+            reached_submit=True,
+            submit_clicked=True,
+            dispatch_confirmed=intent["dispatch_confirmed"],
+            dispatch=intent["dispatch"],
+            attempt_increment=intent["attempt_increment"],
+        )
+
+    profile = Path(job["runtime_root"]) / "profiles" / job["domain"]
+    opened_at = now()
+    async with site_context(playwright, profile) as context:
+        result = await discover(await context.new_page(), pack, job, on_ready=submit, connector=connector)
+    if result.get("oauth_flow_started"):
+        owner_profile = Path("~/.backlink-autofill/browser-profile").expanduser()
+        if owner_profile.is_dir():
+            async with site_context(playwright, owner_profile) as context:
+                result = await discover(await context.new_page(), pack, job, on_ready=submit, connector=connector)
+    if job.get("owner_human_action") and result.get("owner_action_proof") and not pack.get("human_window_used"):
+        from .automation import AuthGuard, fill_known_controls, owner_boundary
+
+        pack["human_window_used"] = True
+        async with site_context(playwright, profile, headed=True) as context:
+            page = await context.new_page()
+            auth = AuthGuard(job["domain"])
+            auth.phase = "AUTH"
+
+            async def guard(route):
+                await auth.refresh_route(route, page)
+
+            await page.route("**/*", guard)
+            await page.goto(result.get("submit_url") or job["submit_url"], wait_until="domcontentloaded", timeout=20000)
+            await page.wait_for_timeout(800)
+            result["filled_fields"] = await fill_known_controls(page, pack, job["domain"])
+            print(json.dumps({"human_wait": job["backlink_id"], "reason": result["reason"]}), flush=True)
+            for _ in range(24):
+                await asyncio.sleep(5)
+                if page.is_closed():
+                    break
+                if await owner_boundary(page) is None:
+                    await page.unroute("**/*", guard)
+                    result = await discover(
+                        page,
+                        pack,
+                        dict(job, submit_url=page.url, resume_in_place=True),
+                        on_ready=submit,
+                        connector=connector,
+                    )
+                    result["human_resumed"] = True
+                    break
+            else:
+                result["human_wait_timed_out"] = True
+    result.update(browser_opened_at=opened_at, browser_closed_at=now())
+    if not (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).exists():
+        async with sheet_writer(job["runtime_root"]):
+            record_non_submit(dict(job, submit_url=result.get("submit_url", "")), result, api, prior)
+    result.setdefault("coverage", "deferred")
+    return result
+
+
+async def run_site(job, pack, api, playwright, *, connector=None):
     prior = full_row(api, job["row"])
     if prior[:2] != ["wyrplay", job["backlink_id"]] or prior[4] not in {"", "0"}:
         return {"outcome": "需人工核查", "reason": "FRESH_JOINT_KEY_OR_ATTEMPT_BLOCK", "coverage": "deferred"}
     if is_blacklisted(api, job["backlink_id"], job["domain"]):
         return {"outcome": "GLOBAL_BLACKLIST", "reason": "FRESH_BLACKLIST_BLOCK", "coverage": "confirmed_reject"}
-    if prior[3] not in {"", "待提交"} and not (
-        job.get("resume") and prior[3] in {"需人工核查", "去人工", "暂时不可用"}
+    if (
+        prior[3] in {"成功", "审核中", "历史未验证"}
+        or prior[7]
+        or re.search(r"SUBMIT_(?:RESULT|DISPATCH)_UNCONFIRMED", prior[8])
     ):
         return {"outcome": "需人工核查", "reason": "PROTECTED_EXISTING_STATUS", "coverage": "deferred"}
     if (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).exists():
         return {"outcome": "需人工核查", "reason": "PERSISTENT_SUBMIT_INTENT", "coverage": "deferred"}
+    if job["mode"] == "live":
+        return await run_live_discovery(job, pack, api, playwright, prior, connector=connector)
     adapter_path = pack["root"] / "adapters" / (job["domain"] + ".json")
     if not adapter_path.is_file():
         from .discovery import discover
@@ -383,6 +467,31 @@ async def run_site(job, pack, api, playwright):
         async with site_context(playwright, profile) as ctx:
             opened_at = now()
             result = await discover(await ctx.new_page(), pack, job)
+        owner_profile = Path("~/.backlink-autofill/browser-profile").expanduser()
+        if result.get("oauth_flow_started") and owner_profile.is_dir():
+            # The initial station context is already closed. Reuse the existing Owner session
+            # without cookie export or another simultaneous browser. Serialize this one profile.
+            with (Path(job["runtime_root"]) / "owner-oauth-profile.lock").open("a") as profile_lock:
+                try:
+                    fcntl.flock(profile_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    result = {
+                        "outcome": "TEMPORARILY_UNAVAILABLE",
+                        "reason": "OWNER_SESSION_PROFILE_BUSY",
+                        "automation_pending": True,
+                    }
+                else:
+                    try:
+                        async with site_context(playwright, owner_profile) as owner_ctx:
+                            result = await discover(await owner_ctx.new_page(), pack, job)
+                    except ValueError as exc:
+                        if str(exc) != "PROFILE_IN_USE":
+                            raise
+                        result = {
+                            "outcome": "TEMPORARILY_UNAVAILABLE",
+                            "reason": "OWNER_SESSION_PROFILE_BUSY",
+                            "automation_pending": True,
+                        }
         result.update(browser_opened_at=opened_at, browser_closed_at=now())
         recovery_job = dict(job, submit_url=result.get("submit_url", job["submit_url"]))
         if result["outcome"] != "READY_TO_SUBMIT" or job["mode"] == "dry-run":
@@ -529,18 +638,23 @@ async def handoff(job, api, playwright):
         # Guard every request to the verified final endpoint, including manually clicked buttons.
         pack_root = Path(__file__).resolve().parents[2] / "projects/wyrplay"
         adapter_path = pack_root / "adapters" / (job["domain"] + ".json")
-        from .human_loop import human_submit_guard, verified_matcher
+        from .human_loop import verified_matcher
 
         adapter = json.loads(adapter_path.read_text()) if adapter_path.is_file() else None
         matcher = verified_matcher(adapter)
 
+        from .automation import AuthGuard
+
+        auth = AuthGuard(job["domain"], matcher)
+        auth.phase = "AUTH"
+        page = await ctx.new_page()
+
         async def no_submit(route):
-            await human_submit_guard(route, matcher)
+            await auth.refresh_route(route, page)
 
         await ctx.route("**/*", no_submit)
         closed = asyncio.Event()
         ctx.on("close", lambda _: closed.set())
-        page = await ctx.new_page()
         await page.goto(job["submit_url"], wait_until="domcontentloaded", timeout=20000)
         print(
             "Owner human handoff open for "
@@ -575,7 +689,8 @@ async def readonly_ready(page, adapter):
         or (await final.inner_text()).strip() != adapter["final_submit_text"]
     ):
         return {"outcome": "需人工核查", "reason": "FINAL_ACTION_CHANGED"}
-    selectors = list(adapter.get("fields", {}).values())
+    selectors = list(adapter.get("fields", {}).values()) + adapter.get("ordinary_checkboxes", [])
+    selectors += adapter.get("submitted_controls", [])
     selectors += [s["selector"] for s in adapter.get("composed_fields", {}).values()]
     selectors += [c["control_selector"] for c in adapter.get("choice_fields", {}).values()]
     selectors += [adapter[k] for k in ["logo_selector", "image_selector", "screenshots_selector"] if adapter.get(k)]

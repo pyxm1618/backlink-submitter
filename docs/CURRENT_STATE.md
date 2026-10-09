@@ -1,17 +1,37 @@
 # 当前 WYRPlay 工作状态（2026-10-09）
 
-正式身份/Sheet/资料包见 project.json，原包 3.0-final 完整保留。
+本次授权仅覆盖正式执行表顺序前 10 个可处理记录，已真实逐站执行，未开启下一批。
+688/channel_basis 硬门槛已取消；缺入口、类型或旧证据仍允许从官网发现。
+正式身份、Sheet 和 3.0-final 资料包保持原合同。已有成功/审核中、Attempt、intent 和黑名单仍保护。
 
-**FUNCTIONAL CANARY VERIFIED**
+实际已确认一次 Telegraph 最终 Publish：POST edit.telegra.ph/save；Attempt=1；匿名 E4 确认公开
+https://telegra.ph/WYRPlay-10-09 含 WYRPlay 官网链接，Sheet A:J 精确回读为成功。
+Sideprojects 在同一 context 完成密码登录、填写和一次 Submit for launch，真实观察到
+POST sideprojects.net /projects/submit；Attempt=1，结果待核实，未确认 E1–E4。
+ebool 与 The Hack Stack 各最终点击一次，派发元数据未确认，Attempt 保持空白；后者页面返回分类必填错误。
+共打开10站、业务填表4站、最终点击4次、确认业务请求2次、成功1、审核中0、重复提交0。
+当前十站完整结果及收尾核验见 LIVE_10_VERIFICATION.md。不能据此宣称可以扩大批量。
 
-**候选池与中文动作修复已核验；不具备下一批大量提交条件，不开启 LIVE**
+Gmail 已连接工具实际 profile/search 成功，已接上 host→stdin→CLI 内存往返；
+本次尚未完成任何真实 OTP/magic link 登录。Google OAuth 已尝试，未验证登录成功。
+新平台账号设置密码可使用 Owner 授权的内存值自动填入；主账号密码、挑战和 2FA 仍由 Owner 操作。
+值不进入 shell 命令、日志、Sheet、Git 或凭据文件。
 
-## 候选池与生产状态修复（2026-10-09，只读新候选）
+LIVE 从发现到填表/多步骤/最终 Submit 使用同一 context；首次 Submit 不要求预存 matcher。
+点击前写 O_EXCL intent，点击最多一次；只有确认实际业务写请求才增加 Attempt。
+测试与 fixture 不替代以上生产结果，未知或系统未完成不得冒充拒绝或 Owner 必须操作。
+
+## 以下为历史执行记录
+
+旧批次的 200 条、688 池、未授权 LIVE 或旧 Gmail 不可用结论仅描述当时状态，
+不能用作本次队列边界或当前 connector 状态。
+
+## 候选池与生产状态修复（2026-10-09，历史决策，688边界已撤销）
 
 全量域名池 != 可提交候选池。正式三表 fresh read：WYRPlay 外链管理19,103条，
 外链总表31,213条，黑名单6,206条；普通新闻/企业/学校等官网不能仅凭在池中就进入浏览器。
-正向渠道预筛仍按总表正式顺序、WYRPlay joint key 和全局黑名单执行：当前688个可核验候选，
-其中671个明确官方发布入口、17个明确目录/发布平台类型。旧泛化成功备注不构成平台渠道事实；
+上一轮曾按正向渠道预筛得到688个可核验候选；该硬门槛已由Owner本轮要求撤销。历史统计为：
+其中671个明确官方发布入口、17个明确目录/发布平台类型。旧泛化成功备注不构成平台渠道事实，但缺渠道事实不再阻止Discovery；
 已验证事实必须有可追溯官方来源。未纳入队列的数据不删除，未审/不确定仍保留未知。
 
 - 原授权200条全部完成逐项官方证据审计：待提交0、去人工119、不适用58、暂时不可用23、黑名单0。

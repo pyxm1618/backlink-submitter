@@ -78,7 +78,7 @@ def test_join_uses_master_order_and_never_visits_blacklist_or_protected(tmp_path
         "ready.example",
         "unknown.example",
     ]
-    assert [x["process"] for x in items] == [False, False, False, False, False, True, True]
+    assert [x["process"] for x in items] == [False, False, False, False, True, True, True]
     assert items[5]["row"] == 8
     assert items[0]["outcome"] == "GLOBAL_BLACKLIST"
     assert items[1]["outcome"] == "SUCCESS"
@@ -94,7 +94,7 @@ def test_existing_attempt_intent_or_legacy_exclusion_is_deferred(tmp_path):
     assert not items[-1]["process"] and not items[-2]["process"]
     s = snapshot()
     s["master"][-1] += ["", "", "失效", "historical timeout"]
-    assert not batch().select_candidates(s, tmp_path)[-1]["process"]
+    assert batch().select_candidates(s, tmp_path)[-1]["process"]
 
 
 def test_invalid_joint_keys_fail_closed(tmp_path):
@@ -496,7 +496,7 @@ def test_dry_worker_missing_owner_fact_closes_without_click_or_sheet_write(tmp_p
     assert not (tmp_path / "submit-intents/wyrplay/site.example.json").exists()
 
 
-@pytest.mark.parametrize("status", ["成功", "审核中", "历史未验证", "需人工核查"])
+@pytest.mark.parametrize("status", ["成功", "审核中", "历史未验证"])
 def test_fresh_protected_status_does_not_open_browser_or_resubmit(tmp_path, status):
     from test_contracts import SheetAPI
 

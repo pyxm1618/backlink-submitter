@@ -263,6 +263,7 @@ async def submit_once(
     page=None,
     submission_request=None,
     dispatch_timeout_ms=30000,
+    before_submit=None,
 ):
     validate_project(project_id)
     validate_payload(payload)
@@ -300,6 +301,7 @@ async def submit_once(
         "attempt_increment": 0,
         "dispatch_confirmed": False,
         "dispatch": None,
+        "before_submit": before_submit,
     }
     # Atomic O_EXCL across processes/restarts. Caller uses the same per-key path for every run.
     try:
@@ -309,6 +311,9 @@ async def submit_once(
     except FileExistsError:
         raise ValueError("Existing submit intent; no automatic duplicate/retry") from None
     observed = asyncio.Event()
+    submission_host = (
+        (urlparse(page.url).hostname or "").removeprefix("www.") if page is not None and matcher is None else ""
+    )
 
     def observe(request):
         parsed = urlparse(request.url)
@@ -321,9 +326,35 @@ async def submit_once(
             save_evidence(path, intent)
             observed.set()
 
-    listening = page is not None and matcher is not None
+    def observe_response(response):
+        request = response.request
+        parsed = urlparse(request.url)
+        host = submission_host
+        if (
+            request.method in {"POST", "PUT", "PATCH"}
+            and ((parsed.hostname or "").removeprefix("www.") == host or (parsed.hostname or "").endswith("." + host))
+            and not re.search(r"analytics|telemetry|beacon|collect|tracking|metrics", parsed.path, re.I)
+            and not observed.is_set()
+        ):
+            # Multipart uploads can contain binary bytes. Inspect identity only in memory.
+            from urllib.parse import unquote_to_bytes
+
+            decoded = unquote_to_bytes(request.post_data_buffer or b"").lower()
+            if b"wyrplay" not in decoded or b"wyrplay.com" not in decoded:
+                return
+            metadata = {"method": request.method, "host": parsed.hostname, "path": parsed.path}
+            validate_dispatch_metadata(metadata)
+            intent.update(
+                state="SUBMIT_RESULT_UNCONFIRMED", attempt_increment=1, dispatch_confirmed=True, dispatch=metadata
+            )
+            save_evidence(path, intent)
+            observed.set()
+
+    listening = page is not None
+    event = "request" if matcher else "response"
+    listener = observe if matcher else observe_response
     if listening:
-        page.on("request", observe)
+        page.on(event, listener)
     try:
         try:
             await click()
@@ -340,7 +371,7 @@ async def submit_once(
                 )
     finally:
         if listening:
-            page.remove_listener("request", observe)
+            page.remove_listener(event, listener)
     save_evidence(path, intent)
     return int(intent["dispatch_confirmed"])
 

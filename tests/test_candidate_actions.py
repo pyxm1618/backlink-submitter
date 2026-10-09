@@ -10,9 +10,8 @@ def test_news_homepage_is_not_submission_entry(tmp_path):
     s = snapshot()
     s["master"][-1] = ["unknown.example", "unknown.example", "https://unknown.example/"]
     item = select_candidates(s, tmp_path)[-1]
-    assert not item["process"]
-    assert item["reason"] == "NO_POSITIVE_CHANNEL_FACT"
-    assert item["coverage"] == "unknown"  # exclusion from browser is not rejection
+    assert item["process"]
+    assert item["channel_basis"] is None  # unknown official home now enters fresh discovery
 
 
 @pytest.mark.parametrize("path", ["/submit", "/write-for-us", "/contribute", "/submit-a-guest-post/"])
@@ -51,7 +50,7 @@ def test_human_actions_have_clear_chinese_status(reason):
         {"outcome": "需人工核查", "reason": reason},
         {"kind": "official_entry", "source_url": "https://example.com/submit"},
     )
-    assert r["action_status"] == "去人工"
+    assert r["action_status"] == ("去人工" if reason in {"HUMAN_VERIFICATION_REQUIRED", "CAPTCHA"} else "暂时不可用")
     assert r["action_reason"] and reason not in r["action_reason"]
     assert r["coverage"] == "deferred"
 
@@ -60,8 +59,8 @@ def test_unknown_without_channel_not_falsely_rejected():
     from backlink_submitter.candidates import action_result
 
     r = action_result({"outcome": "需人工核查", "reason": "OFFICIAL_SUBMIT_URL_UNCONFIRMED"}, None)
-    assert r["coverage"] == "unknown"
-    assert r["action_status"] is None
+    assert r["coverage"] == "deferred"
+    assert r["action_status"] == "暂时不可用" and r["automation_pending"]
 
 
 def test_positive_project_mismatch_not_global_and_temporary_is_actionable():
@@ -197,11 +196,7 @@ def test_human_loop_serial_single_worker_and_formal_queue(tmp_path, monkeypatch)
 
     monkeypatch.setattr(module, "run_pool", pool)
     report = asyncio.run(module.human_loop({"root": tmp_path}, owner_human_action=True, limit=2))
-    assert (
-        visited == ["ready.example", "ready.example", "unknown.example", "unknown.example"]
-        and maximum == 1
-        and active == 0
-    )
+    assert visited == ["ready.example", "unknown.example"] and maximum == 1 and active == 0
     assert report["submit"] == 0 and report["sheet_writes"] == 2
     with pytest.raises(ValueError):
         asyncio.run(module.human_loop({"root": tmp_path}, owner_human_action=False))
@@ -323,7 +318,7 @@ def test_unmapped_required_field_has_actual_name(tmp_path):
         '<button id="final"', '<label for="founder">Founder name</label><input id="founder" required><button id="final"'
     )
     result, requests = asyncio.run(fixture_discover(tmp_path, html))
-    assert result["missing_fields"] == ["Founder name"]
+    assert result["missing_fields"] == ["Founder Name"]
     assert all(method == "GET" for method, _ in requests)
 
 
@@ -385,6 +380,14 @@ def test_human_ready_hands_back_to_existing_headless_chain(tmp_path, monkeypatch
 
     async def pool(jobs, **kwargs):
         modes.append(jobs[0]["mode"])
+        if len(modes) == 1:
+            return [
+                {
+                    "backlink_id": "unknown.example",
+                    "outcome": "HUMAN_VERIFICATION_REQUIRED",
+                    "reason": "HUMAN_VERIFICATION_REQUIRED",
+                }
+            ]
         return [
             {
                 "backlink_id": "unknown.example",
@@ -397,7 +400,7 @@ def test_human_ready_hands_back_to_existing_headless_chain(tmp_path, monkeypatch
 
     monkeypatch.setattr(module, "run_pool", pool)
     asyncio.run(module.human_loop({"root": tmp_path}, owner_human_action=True))
-    assert modes == ["human-loop", "dry-run"]
+    assert modes == ["dry-run", "human-loop", "dry-run"]
 
 
 def test_legacy_comment_success_is_not_verified_channel(tmp_path):
@@ -406,7 +409,8 @@ def test_legacy_comment_success_is_not_verified_channel(tmp_path):
     s["master"][-1][7] = "免费"
     s["master"][-1][12] = "2026-09-27T00:00:00+00:00"
     s["master"][-1][13] = "发现客座文章/博客投稿通道 (Write for us / Guest Post); 自动提交成功，进入审核"
-    assert not select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["channel_basis"] is None
 
 
 def test_channel_fact_needs_traceable_official_source(tmp_path):
@@ -418,7 +422,8 @@ def test_channel_fact_needs_traceable_official_source(tmp_path):
         "发现明确的客座文章/博客投稿通道 (Write for us / Guest Post)",
     )
     s["master"][-1] = r
-    assert not select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["channel_basis"] is None
     r[13] = "官方已核验免费 Guest Post 渠道：https://unknown.example/editorial-guidelines"
     assert select_candidates(s, tmp_path)[-1]["channel_basis"]["kind"] == "verified_platform_fact"
 
@@ -456,7 +461,7 @@ def test_human_worker_failure_stays_in_manual_queue(tmp_path, monkeypatch):
 
     monkeypatch.setattr(module, "run_pool", pool)
     report = asyncio.run(module.human_loop({"root": tmp_path}, owner_human_action=True))
-    assert report["results"][0]["action_status"] == "去人工"
+    assert report["results"][0]["action_status"] == "暂时不可用"
     assert report["sheet_writes"] == report["submit"] == 0
 
 
@@ -468,8 +473,8 @@ def test_observed_chinese_login_instruction_is_actionable(tmp_path):
             tmp_path, '<meta charset="utf-8"><h1>投稿须知</h1><p>需要登录才能访问！</p><a href="/login">登录</a>'
         )
     )
-    assert result["outcome"] == "HUMAN_VERIFICATION_REQUIRED"
-    assert result["reason"] == "OWNER_LOGIN_REQUIRED"
+    assert result["outcome"] != "HUMAN_VERIFICATION_REQUIRED"
+    assert result["reason"] in {"OFFICIAL_SUBMIT_URL_UNCONFIRMED", "AUTH_CONTINUATION_REQUIRED"}
     assert all(method == "GET" for method, _ in requests)
 
 
@@ -482,7 +487,8 @@ def test_unconfirmed_channel_note_is_not_positive_fact(tmp_path):
         "未验证 Guest Post 渠道，需要人工确认：https://unknown.example/about",
     )
     s["master"][-1] = r
-    assert not select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["process"]
+    assert select_candidates(s, tmp_path)[-1]["channel_basis"] is None
 
 
 def test_ready_human_handoff_updates_formal_action_without_attempt(tmp_path):
@@ -512,7 +518,7 @@ def test_temporary_is_not_permanent_dead_end_but_needs_explicit_resume(tmp_path)
     s = snapshot()
     s["execution"][-1][3] = "暂时不可用"
     items = select_candidates(s, tmp_path)
-    assert not items[-1]["process"]  # no automatic retries in a new bulk window
+    assert items[-1]["process"]  # fresh discovery may resume; nonzero Attempt remains protected
     (tmp_path / "human-queue").mkdir()
     (tmp_path / "human-queue/unknown.example.json").write_text(
         json.dumps(

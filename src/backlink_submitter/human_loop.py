@@ -35,7 +35,10 @@ def verified_matcher(adapter):
     return matcher
 
 
-async def human_submit_guard(route, matcher):
+async def human_submit_guard(route, matcher, auth_guard=None):
+    if auth_guard is not None:
+        await auth_guard.route(route)
+        return
     request = route.request
     url = urlparse(request.url)
     # Unknown final endpoint => read-only. Never guess that an arbitrary POST is login.
@@ -71,12 +74,16 @@ async def recheck_handoff(job, pack, api, playwright):
     adapter = json.loads(path.read_text()) if path.is_file() else None
     matcher = verified_matcher(adapter)
     async with site_context(playwright, Path(job["runtime_root"]) / "profiles" / job["domain"], headed=True) as ctx:
+        from .automation import AuthGuard
+
+        auth = AuthGuard(job["domain"], matcher)
+        auth.phase = "AUTH"
+        page = await ctx.new_page()
 
         async def guard(route):
-            await human_submit_guard(route, matcher)
+            await auth.refresh_route(route, page)
 
         await ctx.route("**/*", guard)
-        page = await ctx.new_page()
         await page.goto(job["submit_url"], wait_until="domcontentloaded", timeout=20000)
 
         async def check():
@@ -105,7 +112,8 @@ async def recheck_handoff(job, pack, api, playwright):
         sheet_writes=0,
         next_command="resume --project wyrplay --backlink-id " + job["backlink_id"],
         final_endpoint_guarded=bool(matcher),
-        unknown_matcher_readonly=matcher is None,
+        phase_bound_auth=True,
+        final_submit_blocked=True,
     )
 
 
@@ -187,6 +195,21 @@ async def human_loop(pack, *, owner_human_action=False, limit=1):
                 owner_human_action=True,
                 human_timeout=600,
             )
+            from .automation import OWNER_REASONS
+            from .candidates import action_result
+
+            # Old 去人工 rows may be ordinary login/technical gaps. Headless goes first.
+            automatic = dict(job, mode="dry-run", owner_human_action=False)
+            initial = await run_pool(
+                [automatic], runtime=directory / item["domain"] / "automatic", concurrency=1, timeout=90
+            )
+            if initial[0].get("reason") not in OWNER_REASONS:
+                result = [action_result(initial[0], item.get("channel_basis"))]
+                evidence = save_evidence(directory / (item["backlink_id"] + ".json"), result[0])
+                if result[0].get("outcome") == "READY_TO_SUBMIT":
+                    receipts.append(await record_ready_handoff(api, item, result[0], RUNTIME, evidence))
+                results.extend(result)
+                continue
             result = await run_pool([job], runtime=directory / item["domain"] / "workers", concurrency=1, timeout=630)
             if result[0].get("reason") in {"WORKER_TIMEOUT", "WORKER_CRASH_OR_INVALID_RESULT"}:
                 result[0].update(
