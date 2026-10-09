@@ -4,7 +4,31 @@
 
 **FUNCTIONAL CANARY VERIFIED**
 
-**CONTROLLED ROLLOUT NOT STARTED**
+**OWNER-SCOPED LIVE BATCH COMPLETED / NO READY OR SUBMIT**
+
+## 正式 LIVE 200 候选批次（2026-10-09）
+
+Owner 明确批准基于 `d6a26c0967989196c6bcb78d07447dd70204a697`，从 `uool.com` 后
+按正式三表与 select_candidates 规则锁定200个新可处理候选；首项 `airadar.live`，末项
+`factcheckcenter.jp`。一次性仓库外授权已消费，批次结束，不自动继续下一批。
+
+- 精确处理/访问200；并发2、同域1、200个浏览器关闭区间，worker超时/崩溃0，残留browser/context0。
+- verified adapter新增0、READY_TO_SUBMIT 0、真实Submit 0、SUCCESS/PENDING 0、真实提交率0%。
+- HUMAN_VERIFICATION_REQUIRED 47（验证挑战18、Owner登录29）、OWNER_INPUT_REQUIRED 1。
+- TEMPORARILY_UNAVAILABLE 19；证据未确认待复核133。NOT_APPLICABLE/新增GLOBAL_BLACKLIST均0。
+- 本窗口显式覆盖：approved0 + deferred67 + confirmed_reject0 + unknown133 = 200。
+  unknown保留未知，不作拒绝；全部候选已运行不代表全部资格已确认。
+- 正式Sheet写入200次，每次既有protected writer均完成精确A:J回读；结束再fresh核验200行。
+  恰好批准范围内200行变化；Attempt全部保持原值，结果链接空白，其他项目/错误行变化0。
+- Scope内无Submit intent、重复Submit0；StartupFound及其他既有成功/历史Attempt行未变化。
+- `fabtoolai.com` 返回 `UNMAPPED_REQUIRED_FIELDS`；现有Discovery结果未记录具体字段名。
+  字段事实保持UNKNOWN/需人工核查，不猜Owner事实，不现场修改通用代码。
+- 未观察到必须阻止下一批的系统级错误；此结论不替代尚未实测的Submit异常恢复能力。
+
+基础检查：ruff check/format、mypy、149 pytest、正式Sheet readonly preflight及匿名headless
+浏览器smoke均PASS。未修改通用代码或既有adapter；本次仅固化安全生产核验/当前状态记录。
+完整范围、原因统计、核对依据和外部runtime路径见
+[PRODUCTION_BATCH_200_VERIFICATION.json](PRODUCTION_BATCH_200_VERIFICATION.json)。
 
 ## 生产 Canary
 
@@ -25,10 +49,11 @@ WYRPlay × StartupFound，外链管理 row 6249，backlink_id `startupfound.com`
 
 ## 执行边界
 
-Controlled Rollout 尚未开始，也未获授权；`ready_for_controlled_rollout=false`。
+Canary 后的首次 Owner-scoped LIVE 200批次已结束；Canary快照 `ready_for_controlled_rollout=false`
+不是永久Submit授权，本批没有READY或Submit。未来批次仍须新的Owner明确范围。
 所有 `automatic_submit_allowed=false` 保持不变，StartupFound 的单次运行时授权已消耗。
 不处理历史 Attempt，不扩大平台池；未来工作必须遵循新的 Owner 范围并刷新正式 Sheet。
-本次仅固化仓库状态，新真实 Submit=0、Sheet write=0。
+此前Canary状态收口仅固化仓库，新真实Submit=0、Sheet write=0；本次LIVE批次写入200，见上节。
 
 ## 原 Canary 平台
 
