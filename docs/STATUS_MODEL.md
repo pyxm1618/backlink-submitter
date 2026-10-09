@@ -7,7 +7,9 @@
 | 空白（报告 unknown） | 尚未按新标准处理，保持原样 |
 | 待提交 | 资格已确认；真正执行仍需检查登录、Owner 授权和幂等性 |
 | 历史未验证 | 旧系统称提交，但无当前认可证据；不是失败，先核验，不能直接重投 |
-| 需人工核查 | 人类验证、缺必填资料、配置污染、执行/结果不确定 |
+| 去人工 | 已有发布渠道，但需要登录、人工验证、字段确认或人工表单处理；中文原因明确下一步 |
+| 暂时不可用 | 当前访问失败、超时或临时平台故障；不永久淘汰 |
+| 需人工核查 | 保留旧历史状态及提交派发/结果不确定、配置污染等原安全合同；不得自动重投 |
 | 审核中 | 有与本次 True Submit 绑定的 E1/E2/E3 |
 | 成功 | E4 匿名公开 Listing 与真实 backlink |
 | 被拒绝 | 有平台明确拒绝证据 |
@@ -55,3 +57,5 @@ Login/Continue/Next/Upload/Preview/Save Draft/Open Modal/Join Queue 弹窗不是
 资格：QUALIFIED_A/B/C、NOT_APPLICABLE、MANUAL_REVIEW、UNKNOWN。
 执行就绪：READY、LOGIN_REQUIRED、HUMAN_VERIFICATION、UNKNOWN。
 登录或人类验证本身不否定资格；关键免费/类别/政策事实未知才是资格人工核查。
+
+新的非提交分流只显示明确中文动作，内部 ADAPTER_REVIEW_REQUIRED 等代码不作为 Owner 终态。无正证据的原全量池记录保留未核验，不强制转为不适用。

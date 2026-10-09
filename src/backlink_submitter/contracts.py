@@ -16,7 +16,19 @@ PROJECT = "wyrplay"
 TARGET = "https://www.wyrplay.com/"
 CONTACT = "support@wyrplay.com"
 SHEET_ID = "1uUmlPGzjxNe-XkvWfjuC3c5exiOxZuFJWvHqPTwjaTA"
-STATES = {"", "待提交", "需人工核查", "历史未验证", "审核中", "成功", "被拒绝", "不适用", "提交失败"}
+STATES = {
+    "",
+    "待提交",
+    "需人工核查",
+    "历史未验证",
+    "审核中",
+    "成功",
+    "被拒绝",
+    "不适用",
+    "提交失败",
+    "去人工",
+    "暂时不可用",
+}
 DENY = (
     "quick i ching",
     "quick-iching",

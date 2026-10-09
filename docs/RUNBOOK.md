@@ -25,7 +25,7 @@ Gmail 已连接 connector 优先；Profile + 无副作用 search + 时间/发件
 
 ## 资格与渠道
 
-先用三张表预筛，不访问整个 19k unknown 池。只有被 Owner 批准范围才做现场核验。
+先用三张表和正向发布渠道证据预筛，不访问整个 19k unknown 池。全量域名池不等于可提交候选池。只有被 Owner 批准范围才做现场核验。
 真实官网、正确官方入口、类型适合、免费可用、质量正常才能 QUALIFIED。
 登录不是淘汰；人类验证是执行阻碍；未确认免费/类别则人工核查。
 A/B/C 用简单相关性与质量判断，不打百分分数。
@@ -69,7 +69,7 @@ Owner 登录 Google 不等于每个平台已登录。真实检查平台 session�
 OAuth -> onboarding -> form -> upload -> final action 连续性；不要中间关闭导致 SPA/session 丢失。
 可以正常使用 Owner 已登录 Google 账户，禁止密码重输/挑战/2FA/风险绕过。
 任何 CAPTCHA/Cloudflare Human Verification/设备确认 -> HUMAN_VERIFICATION_REQUIRED，停在现场给 Owner。
-正常 batch 仅 headless；只有 Owner 显式运行单站 `handoff --owner-human-action` 才打开 dedicated headed 窗口。
+正常 batch 仅 headless；只有 Owner 显式运行 `handoff --owner-human-action` 或 `human-loop --owner-human-action` 才逐站打开 dedicated headed 窗口。
 人工步骤由 Owner 完成，最终提交 endpoint 被拦截；随后 `resume` 重新核验，不能自动绕过挑战。
 导航20s、元素10s、提交响应30s，单站90s；需 OTP 最多额外180s。
 关闭 page/context 用 timeout；失败销毁 worker，不能无限堆页。小批 concurrency2、同域1，

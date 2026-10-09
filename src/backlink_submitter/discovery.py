@@ -61,7 +61,9 @@ async def qualify(page, domain):
     for marker, outcome, reason in POLICIES:
         if re.search(r"(?:^|[.!?\n]\s*)" + re.escape(marker) + r"(?:[.!?\n]|$)", text):
             return {"outcome": outcome, "reason": reason, "source_url": page.url, "marker": marker, "checked_at": now()}
-    if re.search(r"(?:sign in|log in|login|create an account) (?:to|required to) (?:submit|add|list|launch)", text):
+    if "需要登录才能访问" in text or re.search(
+        r"(?:sign in|log in|login|create an account) (?:to|required to) (?:submit|add|list|launch)", text
+    ):
         return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "OWNER_LOGIN_REQUIRED"}
     return None
 
@@ -285,7 +287,25 @@ async def build_adapter(page, pack, domain):
             if control["required"]:
                 adapter["required_fields"].append(field)
         elif control["required"] or control["type"] in {"checkbox", "radio"}:
-            return {"outcome": "OWNER_INPUT_REQUIRED", "reason": "UNMAPPED_REQUIRED_FIELDS"}, None
+            label = next(
+                (
+                    t.strip()
+                    for t in [
+                        *control["labels"],
+                        control["aria"],
+                        control["placeholder"],
+                        control["name"],
+                        control["id"],
+                    ]
+                    if t.strip()
+                ),
+                "未标注的必填控件（需人工查看）",
+            )
+            return {
+                "outcome": "OWNER_INPUT_REQUIRED",
+                "reason": "UNMAPPED_REQUIRED_FIELDS",
+                "missing_fields": [label],
+            }, None
         else:
             continue
         evidence.append(

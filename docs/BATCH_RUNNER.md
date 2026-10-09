@@ -8,11 +8,16 @@
 按外链总表实际行顺序关联现有 WYRPlay 行；缺失总表事实的行在末尾保留 unknown，不自动建行。
 重复键/不一致配置 fail closed。每次运行和正式写入都刷新 Sheet。
 
-先跳过黑名单、成功/审核中/历史未验证/需人工核查等已有状态、非零 Attempt、persistent intent。
+先跳过黑名单、成功/审核中/历史未验证/需人工核查/去人工/暂时不可用等已有状态、非零 Attempt、persistent intent。
 历史总表“失效/已排除”只进入待复核，不能因旧 timeout 判永久失效或新增黑名单。
-没有 adapter 的可处理候选会进入只读 Discovery；入口缺失时只从官网与观察到的同域链接寻找。
+浏览器前必须有可追溯的正向渠道依据：总表的官方发布入口、明确目录/社区/内容发布类型，
+或同时具备免费事实、验证时间与官方来源 URL 的平台渠道事实。首页、login/register、
+“实测免费”本身、旧“自动提交成功”及无官方来源的笼统“发现投稿通道”均不够。
+已知评论/订阅 endpoint 不作为发布渠道。该预筛只决定是否进入浏览器，不删原记录、不把未知改为拒绝。
+只读取 WYRPlay 执行行；不使用 Quick I Ching 的状态、Attempt、payload 或提交结果。
+没有 adapter 的合格候选才进入只读 Discovery；入口缺失时只从官网与观察到的同域链接寻找。
 不能确认入口/字段/资格/matcher 的记录保留 unknown 或对应明确阻碍；不猜路径或 selector。
-按全量正式池顺序推进，`--limit 50` 表示前50个可处理候选，无需人工挑选平台。
+按预筛后的正式候选池顺序推进，`--limit 50` 表示前50个可处理候选，无需人工挑选平台。
 `--start-after KEY` 和 `--limit N` 可限定本轮执行窗口；未处理记录保留 deferred/unknown。
 报告同时保留 approved/deferred/confirmed_reject/unknown，original total=sum(states)。
 
@@ -70,7 +75,7 @@ fetch method/host/path；通用 bundle 中出现 endpoint 字符串不构成 han
 生成后 DRY RUN 返回 READY；未来经 Owner 新授权的 LIVE 会释放 Discovery context，再进入原有
 worker 的真实填写、fresh Sheet/黑名单/intent/授权检查以及 run_submission，不能直接 Submit。
 分类原因 OFFICIAL_SUBMIT_URL_UNCONFIRMED、DISPATCH_MATCHER_UNVERIFIED、ADAPTER_REVIEW_REQUIRED
-仍对应现有需人工核查，不新增平行状态数据库。AI-only 仅项目不适用；全球淘汰必须命中明确
+仅保留内部诊断；存在已记录发布渠道但不能自动执行时，Owner 行动状态为“去人工”，原因/备注用中文说明。不新增平行状态数据库。AI-only 仅项目不适用；全球淘汰必须命中明确
 官方完整政策声明，普通付费价格、超时/404/无法查明均不能推断全球淘汰。
 
 ## Adapter 边界
@@ -96,7 +101,7 @@ PERMANENTLY_UNAVAILABLE/PAYMENT_ONLY/NO_EXTERNAL_LINK_CHANNEL 的正证据，精
 仍不宣称 Sheets API 原子 CAS，发现并发变化立即停止。
 
 遇到 CAPTCHA/Cloudflare/2FA/密码挑战：先关闭 context，再写安全恢复提示到仓库外
-`~/.backlink-autofill/runtime/wyrplay/human-queue/KEY.json`。LIVE 写“需人工核查”与明确原因，
+`~/.backlink-autofill/runtime/wyrplay/human-queue/KEY.json`。LIVE 非提交分流写“去人工”与中文具体原因，
 Attempt 不变；DRY RUN 只保留现场提示，不改正式 Sheet。这些提示和运行审计文件不是平行账本。
 不保存 cookie/token/邮箱正文/认证 URL/敏感页面。Profile 留在仓库外，不复制到 Git。
 
@@ -148,3 +153,33 @@ E2 仍需已连接 Gmail connector 提供本次绑定的正式邮件，经 email
 官方同组件 render 绑定、已审计 handler hash 和 `founder_listing` payload 同时证明。
 复用 adapter 时在新 context 中重新展开、检查字段、免费条款与 handler；变化后停止。
 adapter 的 `automatic_submit_allowed=false`，仍须独立 Owner LIVE 授权及全部既有提交合同。
+
+## 中文动作与人工循环
+
+正式非提交核验显示“待提交 / 去人工 / 不适用 / 暂时不可用”；成功与审核中仍完全依赖原 E1–E4。
+待提交只来自全部现有 adapter/readiness 门槛通过。需登录、人工验证、真实缺字段、复杂表单/
+不明最终请求进入去人工；不适用须项目级正证据，黑名单须既有严格平台级证据。
+无正向渠道事实的全量池记录保留 unreviewed，不写成不适用或黑名单，也不进入浏览器。
+内部英文原因码仍在 runtime evidence，中文动作不是新提交授权，更不抹去证据不确定性。
+未确认 dispatch/提交结果的原 Submit 合同、需人工核查和 persistent intent 保持不变，禁止重投。
+
+Owner 明确处理时启动顺序循环（默认一站，可给出本次最多处理数量）：
+
+```bash
+.venv/bin/backlink-submitter human-loop --project wyrplay --owner-human-action --limit 5
+```
+
+队列由正式 Sheet 的“去人工”状态及总表顺序决定；runtime hint 只提供安全恢复 URL/profile。
+缺 hint 的行仍去人工，提示先单站核验；不创建另一套正式任务数据库。
+一次仅一个 dedicated headed browser，每5秒检查验证，最长10分钟。超时/关闭保持去人工，
+context 关闭与 worker 进程组回收完成后才进入下一站。没有 Owner 明确命令不会抢桌面焦点。
+已验证 matcher 的最终 endpoint 所有方法都拦截；无已验证 matcher 时整个窗口只读，
+依赖 POST 的登录也不能放行，保留去人工等待单站 matcher 核验，不猜哪个 POST 是登录。
+Owner 完成验证后，关闭 headed，再交现有 headless 单站链重新核验所有门槛。
+循环不写提交结果、不执行 Submit；既有 headless 链确认 READY 后，使用原 protected writer
+将该行从去人工更新为待提交，Attempt 不变，每次核对联合键并完整 A:J 回读。超时仍去人工。
+返回单站 resume 指引；其余未通过项保留去人工，不靠新数据库推进队列。
+真正继续提交仍需独立、单次、范围明确的 Owner LIVE grant；不能因人工循环通过而自动消费提交授权。
+人工循环编排已由测试验证；没有声称未知 matcher 平台或真实 Owner 登录闭环已生产验证。
+
+暂时不可用不会在普通批次自动重试。保留已观察到的安全恢复提示，Owner 可显式指定单站 `resume --mode dry-run` 重新核验；非零 Attempt/intent/成功/审核中仍禁止恢复提交。只有新的单站 LIVE grant 才允许恢复后的真实 Submit。

@@ -96,6 +96,8 @@ def select_candidates(snapshot, runtime):
         rows[row[1]] = (number, row)
     blocked_keys = {r[0] for r in snapshot["blacklist"][1:] if r}
     blocked_domains = {r[1].lower().removeprefix("www.") for r in snapshot["blacklist"][1:] if len(r) > 1}
+    from .candidates import channel_basis
+
     candidates = []
     seen = set()
     for master_number, raw in enumerate(snapshot["master"][1:], 2):
@@ -123,6 +125,7 @@ def select_candidates(snapshot, runtime):
             "outcome": "需人工核查",
             "reason": "UNKNOWN_PLATFORM",
             "coverage": "unknown",
+            "channel_basis": channel_basis(m),
         }
         if key in blocked_keys or domain in blocked_domains:
             item.update(outcome="GLOBAL_BLACKLIST", reason="EXISTING_GLOBAL_BLACKLIST", coverage="confirmed_reject")
@@ -142,6 +145,8 @@ def select_candidates(snapshot, runtime):
             item.update(
                 outcome="TEMPORARILY_UNAVAILABLE", reason="HISTORICAL_PLATFORM_EXCLUSION_REVIEW", coverage="deferred"
             )
+        elif not item["channel_basis"]:
+            item.update(reason="NO_POSITIVE_CHANNEL_FACT", coverage="unknown", submit_url="")
         elif not official_url(m[2], domain):
             item.update(process=True, reason="REQUIRES_OFFICIAL_ENTRY_DISCOVERY", submit_url="")
         else:
@@ -251,8 +256,14 @@ async def terminate_group(process):
 
 
 async def run_pool(jobs, *, runtime, concurrency=2, timeout=90, command=None):
-    if type(concurrency) is not int or not 1 <= concurrency <= 4 or not 0 < timeout <= 270:
-        raise ValueError("Concurrency must be 1..4; worker deadline at most 270 seconds")
+    human_wait = (
+        concurrency == 1
+        and len(jobs) == 1
+        and jobs[0].get("mode") == "human-loop"
+        and jobs[0].get("owner_human_action") is True
+    )
+    if type(concurrency) is not int or not 1 <= concurrency <= 4 or not 0 < timeout <= (630 if human_wait else 270):
+        raise ValueError("Concurrency must be 1..4; extended wait only for one explicit human-loop worker")
     runtime = Path(runtime)
     runtime.mkdir(parents=True, exist_ok=True)
     command = command or [sys.executable, "-m", "backlink_submitter.batch_worker"]
@@ -348,7 +359,7 @@ def resume_candidate(candidates, key, runtime):
     if saved.get("project_id") != "wyrplay" or saved.get("backlink_id") != key or saved.get("domain") != item["domain"]:
         raise ValueError("Human hint identity mismatch")
     if (
-        item["prior_status"] not in {"", "待提交", "需人工核查"}
+        item["prior_status"] not in {"", "待提交", "需人工核查", "去人工", "暂时不可用"}
         or item["prior_attempt"] not in {"", "0"}
         or item["outcome"] == "GLOBAL_BLACKLIST"
     ):
@@ -512,7 +523,11 @@ async def run_batch(
             concurrency=1 if mode == "handoff" else concurrency,
             timeout=210 if mode == "handoff" else 90,
         )
+        from .candidates import action_result
+
         for i, result in enumerate(worker_results):
+            worker_results[i] = action_result(result, jobs[i].get("channel_basis"))
+            result = worker_results[i]
             if result.get("reason") in {"WORKER_TIMEOUT", "WORKER_CRASH_OR_INVALID_RESULT"}:
                 worker_results[i] = await recover_worker_result(jobs[i], result, api)
         by_key = {x["backlink_id"]: x for x in deferred}
@@ -534,6 +549,8 @@ async def run_batch(
             "mode": mode,
             "candidate_total": original_total,
             "workers_started": len(jobs),
+            "positive_pool_total": sum(bool(x.get("channel_basis")) and x["process"] for x in candidates),
+            "window_actions": dict(Counter(x.get("action_status") or "未核验" for x in worker_results)),
             "concurrency": 1 if mode == "handoff" else concurrency,
             "same_domain_max": 1,
             "observed_browser_max": maximum,

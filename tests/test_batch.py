@@ -230,7 +230,7 @@ def test_human_queues_runtime_hint_but_dry_never_writes_sheet(tmp_path):
     assert saved["backlink_id"] == "site.example" and saved["submit"] == 0
     job["mode"] = "live"
     record_non_submit(job, result, api, api.row.copy())
-    assert api.writes == 1 and api.row[3] == "需人工核查" and api.row[4] == ""
+    assert api.writes == 1 and api.row[3] == "去人工" and api.row[4] == ""
 
 
 def test_batch_uses_real_single_engine_dispatch_evidence_and_attempt_receipt(tmp_path):

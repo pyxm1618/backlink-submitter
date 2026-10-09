@@ -257,7 +257,7 @@ def test_site_human_stop_closes_context_before_queue_and_live_manual_write(tmp_p
             assert result["outcome"] == "HUMAN_VERIFICATION_REQUIRED"
             assert browser.contexts == []
             assert (tmp_path / "human-queue/site.example.json").is_file()
-            assert api.row[3] == "需人工核查" and api.row[4] == "" and api.writes == 1
+            assert api.row[3] == "去人工" and api.row[4] == "" and api.writes == 1
             assert not (tmp_path / "submit-intents/wyrplay/site.example.json").exists()
             await browser.close()
 

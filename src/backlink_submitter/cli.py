@@ -35,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="WYRPlay preflight/batch; dry-run default, LIVE needs an external Owner grant"
     )
-    parser.add_argument("command", choices=["preflight", "batch", "resume", "handoff"])
+    parser.add_argument("command", choices=["preflight", "batch", "resume", "handoff", "human-loop"])
     parser.add_argument("--project", required=True)
     parser.add_argument("--read-sheet", action="store_true")
     parser.add_argument("--browser-smoke", action="store_true")
@@ -50,6 +50,14 @@ def main():
     root = Path(__file__).resolve().parents[2]
     try:
         pack = load_project(args.project, root / "projects/wyrplay")
+        if args.command == "human-loop":
+            from .human_loop import human_loop
+
+            if args.mode != "dry-run" or args.backlink_id or args.owner_approval or args.start_after:
+                raise ValueError("Human loop only verifies; LIVE requires separate scoped resume")
+            report = asyncio.run(human_loop(pack, owner_human_action=args.owner_human_action, limit=args.limit or 1))
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 0
         if args.command != "preflight":
             from .batch import run_batch
 

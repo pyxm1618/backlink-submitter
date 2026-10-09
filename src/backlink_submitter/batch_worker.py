@@ -96,6 +96,9 @@ async def inspect_page(page, adapter, pack):
 
 
 def record_non_submit(job, result, api, prior):
+    from .candidates import action_result
+
+    result = action_result(result, job.get("channel_basis"))
     runtime = Path(job["runtime_root"])
     evidence = {
         **result,
@@ -109,25 +112,37 @@ def record_non_submit(job, result, api, prior):
         "attempt_increment": 0,
     }
     path = save_evidence(Path(job.get("evidence_dir", runtime / "checks")) / (job["backlink_id"] + ".json"), evidence)
-    if result["outcome"] == "HUMAN_VERIFICATION_REQUIRED":
+    if result.get("action_status") in {"去人工", "暂时不可用"}:
+        resume_url = job["submit_url"]
+        if not official_url(resume_url, job["domain"]):
+            resume_url = next(
+                (u for u in reversed(result.get("discovery_visited", [])) if official_url(u, job["domain"])), ""
+            )
         save_evidence(
             runtime / "human-queue" / (job["backlink_id"] + ".json"),
-            dict(evidence, resume_step="RECHECK_FORM", profile_path=str(runtime / "profiles" / job["domain"])),
+            dict(
+                evidence,
+                submit_url=resume_url,
+                resume_step="RECHECK_FORM",
+                profile_path=str(runtime / "profiles" / job["domain"]),
+            ),
         )
     if job["mode"] != "live":
         return
     if result["outcome"] == "GLOBAL_BLACKLIST":
         append_global_blacklist(api, job, result)
         return
-    status = "不适用" if result["outcome"] == "NOT_APPLICABLE" else "需人工核查"
+    status = result.get("action_status")
+    if status is None:
+        raise ValueError("Unreviewed channel cannot receive a guessed production action")
     outcome = {"project_id": "wyrplay", "status": status, "evidence_code": "", "result_url": ""}
     write_outcome(
         api,
         job["row"],
         job["backlink_id"],
         outcome,
-        reason=prior[8] + "\n[Batch] " + result["reason"],
-        summary=prior[9] + "\n" + result["outcome"] + " | " + str(path),
+        reason=prior[8] + "\n[本次行动] " + result["action_reason"],
+        summary=prior[9] + "\n" + status + " | " + str(path),
         expected_prior=prior,
     )
 
@@ -232,7 +247,7 @@ async def execute_ready(page, adapter, pack, api, job):
         if live_gate["outcome"] != "READY_TO_SUBMIT":
             raise ValueError(live_gate["reason"])
         if prior[3] != "待提交":
-            if prior[3] != "" and not (job.get("resume") and prior[3] == "需人工核查"):
+            if prior[3] != "" and not (job.get("resume") and prior[3] in {"需人工核查", "去人工", "暂时不可用"}):
                 raise ValueError("Existing state blocks Submit")
             ready = {"project_id": "wyrplay", "status": "待提交", "result_url": "", "evidence_code": ""}
             write_outcome(
@@ -354,7 +369,9 @@ async def run_site(job, pack, api, playwright):
         return {"outcome": "需人工核查", "reason": "FRESH_JOINT_KEY_OR_ATTEMPT_BLOCK", "coverage": "deferred"}
     if is_blacklisted(api, job["backlink_id"], job["domain"]):
         return {"outcome": "GLOBAL_BLACKLIST", "reason": "FRESH_BLACKLIST_BLOCK", "coverage": "confirmed_reject"}
-    if prior[3] not in {"", "待提交"} and not (job.get("resume") and prior[3] == "需人工核查"):
+    if prior[3] not in {"", "待提交"} and not (
+        job.get("resume") and prior[3] in {"需人工核查", "去人工", "暂时不可用"}
+    ):
         return {"outcome": "需人工核查", "reason": "PROTECTED_EXISTING_STATUS", "coverage": "deferred"}
     if (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).exists():
         return {"outcome": "需人工核查", "reason": "PERSISTENT_SUBMIT_INTENT", "coverage": "deferred"}
@@ -475,7 +492,7 @@ async def main(path):
         raise ValueError("Unsafe worker identity")
     pack = load_project("wyrplay", Path(__file__).resolve().parents[2] / "projects/wyrplay")
     if (
-        job["mode"] not in {"dry-run", "live", "handoff"}
+        job["mode"] not in {"dry-run", "live", "handoff", "human-loop"}
         or job["mode"] == "live"
         and job.get("runtime_approved") is not True
     ):
@@ -484,7 +501,12 @@ async def main(path):
 
     async with async_playwright() as pw:
         api = service(writable=job["mode"] == "live")
-        result = await handoff(job, api, pw) if job["mode"] == "handoff" else await run_site(job, pack, api, pw)
+        if job["mode"] == "human-loop":
+            from .human_loop import recheck_handoff
+
+            result = await recheck_handoff(job, pack, api, pw)
+        else:
+            result = await handoff(job, api, pw) if job["mode"] == "handoff" else await run_site(job, pack, api, pw)
     save_evidence(job["result_path"], dict(result, backlink_id=job["backlink_id"]))
 
 
@@ -494,7 +516,7 @@ async def handoff(job, api, playwright):
     prior = full_row(api, job["row"])
     if (
         prior[:2] != ["wyrplay", job["backlink_id"]]
-        or prior[3] not in {"", "待提交", "需人工核查"}
+        or prior[3] not in {"", "待提交", "需人工核查", "去人工"}
         or prior[4] not in {"", "0"}
         or is_blacklisted(api, job["backlink_id"], job["domain"])
     ):
@@ -507,19 +529,13 @@ async def handoff(job, api, playwright):
         # Guard every request to the verified final endpoint, including manually clicked buttons.
         pack_root = Path(__file__).resolve().parents[2] / "projects/wyrplay"
         adapter_path = pack_root / "adapters" / (job["domain"] + ".json")
-        matcher = json.loads(adapter_path.read_text())["submission_request"] if adapter_path.is_file() else None
+        from .human_loop import human_submit_guard, verified_matcher
 
-        from urllib.parse import urlparse
+        adapter = json.loads(adapter_path.read_text()) if adapter_path.is_file() else None
+        matcher = verified_matcher(adapter)
 
         async def no_submit(route):
-            r = route.request
-            u = urlparse(r.url)
-            if (matcher is None and r.method not in {"GET", "HEAD", "OPTIONS"}) or (
-                matcher and (r.method, u.hostname, u.path) == (matcher["method"], matcher["host"], matcher["path"])
-            ):
-                await route.abort()
-            else:
-                await route.continue_()
+            await human_submit_guard(route, matcher)
 
         await ctx.route("**/*", no_submit)
         closed = asyncio.Event()
