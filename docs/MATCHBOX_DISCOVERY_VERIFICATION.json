@@ -1,0 +1,98 @@
+{
+  "project_id": "wyrplay",
+  "verified_at": "2026-10-09T00:58:55.867472+00:00",
+  "base_main_commit": "4d7c29d2092d94bbdf576d49044aaa0b7554beff",
+  "scope": "Only the audited Matchbox discovery false negative; original 50-candidate readonly regression",
+  "matchbox_ready": true,
+  "matchbox_adapter": "projects/wyrplay/adapters/askmatchbox.com.json",
+  "matchbox_adapter_sha256": "9c0d53ed4b3fb45557c9f2b709277ae9a6940a1c8e05f61ea96488cbcd293b03",
+  "matchbox_discovery_evidence": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/matchbox-discovery-20261009-005439/result.json",
+  "matchbox_forwarded_mutations": 0,
+  "matchbox_actual_dom_identity_verified": true,
+  "handler_policy": "Exact audited handler digest plus actual DOM onSubmit and official same-component React render binding; unbound strings rejected",
+  "regression": {
+    "verified_at": "2026-10-09T00:57:13.765800+00:00",
+    "runtime": "/Users/milushangdi/.backlink-autofill/runtime/wyrplay/matchbox-regression-20261009-005323",
+    "mode": "dry-run",
+    "window_count": 50,
+    "original_order_verified": true,
+    "workers_started": 50,
+    "concurrency": 2,
+    "same_domain_max": 1,
+    "observed_browser_max": 2,
+    "browser_context_intervals_closed": 49,
+    "worker_groups_reclaimed": true,
+    "coverage": {
+      "approved": 1,
+      "deferred": 16,
+      "confirmed_reject": 0,
+      "unknown": 33
+    },
+    "outcomes": {
+      "HUMAN_VERIFICATION_REQUIRED": 12,
+      "需人工核查": 33,
+      "TEMPORARILY_UNAVAILABLE": 4,
+      "READY_TO_SUBMIT": 1
+    },
+    "reasons": {
+      "HUMAN_VERIFICATION_REQUIRED": 6,
+      "OFFICIAL_SUBMIT_URL_UNCONFIRMED": 8,
+      "ADAPTER_REVIEW_REQUIRED": 17,
+      "OWNER_LOGIN_REQUIRED": 6,
+      "HTTP_UNAVAILABLE_NOT_PERMANENT_PROOF": 3,
+      "FINAL_ACTION_UNVERIFIED": 7,
+      "OFFICIAL_PAGE_UNAVAILABLE": 1,
+      "READONLY_ADAPTER_FORM_GATE_PASSED": 1,
+      "FINAL_SELECTOR_UNVERIFIED": 1
+    },
+    "ready": [
+      "askmatchbox.com"
+    ],
+    "new_adapters_during_regression": [],
+    "modified_adapters_during_regression": [],
+    "startupfound_A_J_unchanged": true,
+    "startupfound_before_A_J_sha256": "f07ba9bc1ad0fb7a239b49fcc4ed6d352a495f730f5cf66cf57524df05219909",
+    "true_submit": 0,
+    "sheet_writes": 0,
+    "rollout_started": false,
+    "existing_adapter_workers_without_interval_telemetry": [
+      "askmatchbox.com"
+    ],
+    "remaining_batch_headless_browsers": 0,
+    "worker_results_after_successful_exit": 50,
+    "other_49_not_promoted": true,
+    "other_49_reason_changes": [
+      {
+        "backlink_id": "uc123.net",
+        "previous_outcome": "TEMPORARILY_UNAVAILABLE",
+        "previous_reason": "HTTP_UNAVAILABLE_NOT_PERMANENT_PROOF",
+        "current_outcome": "需人工核查",
+        "current_reason": "ADAPTER_REVIEW_REQUIRED"
+      },
+      {
+        "backlink_id": "ziyk.net",
+        "previous_outcome": "需人工核查",
+        "previous_reason": "ADAPTER_REVIEW_REQUIRED",
+        "current_outcome": "TEMPORARILY_UNAVAILABLE",
+        "current_reason": "HTTP_UNAVAILABLE_NOT_PERMANENT_PROOF"
+      }
+    ],
+    "resource_verification": "49 recorded closed intervals; Matchbox reused adapter also closed via site_context finally; all 50 valid results require worker exit=0, process groups reclaimed, no remaining runtime headless browser"
+  },
+  "remaining_batch_headless_browsers": 0,
+  "matchbox_persistent_intent_created": false,
+  "automatic_submit_allowed": false,
+  "tests": {
+    "pytest_passed": 149,
+    "original_tests_preserved": 128,
+    "new_tests": 21,
+    "ruff_check": "PASS",
+    "ruff_format_check": "PASS",
+    "mypy": "PASS",
+    "readonly_preflight": "PASS",
+    "browser_smoke": "PASS"
+  },
+  "true_submit": 0,
+  "sheet_writes": 0,
+  "rollout_started": false
+}

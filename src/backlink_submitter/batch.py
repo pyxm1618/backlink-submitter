@@ -11,7 +11,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .contracts import field_value, now, safe_artifact, save_evidence, timestamp, validate_dispatch_metadata
+from .contracts import (
+    composed_value,
+    field_value,
+    identity_mapped,
+    now,
+    safe_artifact,
+    save_evidence,
+    timestamp,
+    validate_dispatch_metadata,
+)
 
 MASTER_HEADER = [
     "外链ID",
@@ -163,6 +172,9 @@ def select_candidates(snapshot, runtime):
 
 def adapter_gate(adapter, pack):
     for field in adapter.get("required_fields", []):
+        if field in adapter.get("composed_fields", {}):
+            composed_value(pack, adapter["composed_fields"][field])
+            continue
         taxonomy = adapter.get("taxonomy", {})
         if field == "Category" and (
             taxonomy.get("selected_verified") or taxonomy.get("native_select") and taxonomy.get("option_verified")
@@ -189,7 +201,7 @@ def adapter_gate(adapter, pack):
         "QUALIFIED_C",
     }:
         return {"outcome": "需人工核查", "reason": "QUALIFICATION_OR_RECIPROCAL_REVIEW"}
-    if not all(k in adapter.get("fields", {}) for k in ["Product / App Name", "Website URL"]):
+    if not identity_mapped(adapter, pack):
         return {"outcome": "需人工核查", "reason": "IDENTITY_MAPPING_UNVERIFIED"}
     return None
 

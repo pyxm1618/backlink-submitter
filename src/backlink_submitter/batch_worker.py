@@ -22,7 +22,7 @@ from .contracts import (
     validate_payload,
 )
 from .sheets import append_global_blacklist, full_row, is_blacklisted, service, write_outcome
-from .workflow import fill_fields, human_boundary, run_submission
+from .workflow import fill_fields, human_boundary, run_submission, verify_identity
 
 
 @asynccontextmanager
@@ -71,6 +71,12 @@ async def site_context(playwright, profile, *, headed=False, browser=None):
 
 
 async def inspect_page(page, adapter, pack):
+    if adapter.get("reveal_action"):
+        from .matchbox import inspect_matchbox
+
+        changed = await inspect_matchbox(page, adapter)
+        if changed:
+            return changed
     try:
         await human_boundary(page)
     except ValueError:
@@ -80,7 +86,10 @@ async def inspect_page(page, adapter, pack):
     if adapter.get("authenticated_selector"):
         if await page.locator(adapter["authenticated_selector"]).count() != 1:
             return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "OWNER_LOGIN_REQUIRED"}
-    for selector in adapter.get("fields", {}).values():
+    selectors = list(adapter.get("fields", {}).values()) + [
+        s["selector"] for s in adapter.get("composed_fields", {}).values()
+    ]
+    for selector in selectors:
         if await page.locator(selector).count() != 1:
             return {"outcome": "需人工核查", "reason": "FORM_OR_SELECTOR_CHANGED"}
     return None
@@ -201,6 +210,7 @@ async def prepare_form(page, adapter, pack):
         "es=>es.map(e=>e.type==='file'?[...e.files].map(f=>f.name):e.value)"
     )
     validate_payload(values)
+    await verify_identity(page, adapter, pack)
 
 
 async def execute_ready(page, adapter, pack, api, job):
@@ -550,6 +560,7 @@ async def readonly_ready(page, adapter):
     ):
         return {"outcome": "需人工核查", "reason": "FINAL_ACTION_CHANGED"}
     selectors = list(adapter.get("fields", {}).values())
+    selectors += [s["selector"] for s in adapter.get("composed_fields", {}).values()]
     selectors += [c["control_selector"] for c in adapter.get("choice_fields", {}).values()]
     selectors += [adapter[k] for k in ["logo_selector", "image_selector", "screenshots_selector"] if adapter.get(k)]
     if adapter.get("taxonomy"):

@@ -136,3 +136,15 @@ OWNER_INPUT_REQUIRED、TEMPORARILY_UNAVAILABLE、READY_TO_SUBMIT 或现有 Sheet
 E1 沿用单站引擎，E3/E4 只取观察到的真实链接并使用既有 proof helpers；后续更新 increment=0。
 E2 仍需已连接 Gmail connector 提供本次绑定的正式邮件，经 email_pending 验证；CLI 不引入
 第二套 OAuth、邮件服务或假邮件 fallback，缺邮件证据明确不可用，不能猜成功。
+
+## Matchbox 已核验模式
+
+`askmatchbox.com` 的 `/founders` 使用唯一 `Request a listing →` 按钮展开 listing request。
+展开阶段始终阻断 POST/PUT/PATCH/DELETE，不创建 submit intent、不计 Attempt。
+`composed_fields` 仅支持按顺序组合正式 `Product / App Name` 与 `Website URL`，分隔符明确配置为换行；
+不支持模板、自由文案、Founder/Funding 或其他字段。填写后和真实 Submit 前精确核对完整 identity。
+无 taxonomy/upload 的该表单独立验证；其他平台仍走原 discovery/adapter 规则。
+`Add my product` 仅在已核验 listing form 内接受。matcher 必须由现场 React onSubmit、
+官方同组件 render 绑定、已审计 handler hash 和 `founder_listing` payload 同时证明。
+复用 adapter 时在新 context 中重新展开、检查字段、免费条款与 handler；变化后停止。
+adapter 的 `automatic_submit_allowed=false`，仍须独立 Owner LIVE 授权及全部既有提交合同。

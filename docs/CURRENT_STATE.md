@@ -1,4 +1,4 @@
-# 当前 WYRPlay 工作状态（2026-10-08）
+# 当前 WYRPlay 工作状态（2026-10-09）
 
 正式身份/Sheet/资料包见 project.json，原包 3.0-final 完整保留。
 
@@ -62,3 +62,12 @@ StartupFound 的 Founder 显示为平台账户 Display name Wang Tachyon，未�
 无 adapter 的可处理候选现在复用现有 worker 进行有界官网核验，凭正证据生成 adapter 或明确分流。
 当前轮仅前50个可处理候选的顺序 dry-run；真实 Submit=0、Sheet write=0，未启动 LIVE。
 核验结果见 `DISCOVERY_DRY_RUN_VERIFICATION.json`；未覆盖的平台仍保留原显式 unknown/deferred。
+
+## Matchbox 定向修复（2026-10-09，未执行 LIVE）
+
+仅 `askmatchbox.com` 新增已现场核验的表单展开、组合 identity 和 React handler 支持。
+真实 readonly discovery 已生成 verified adapter，READY_TO_SUBMIT；最终 Submit=0、Sheet write=0。
+组合值只来自正式名称和 canonical URL，换行分隔；prepare_form 与最终提交前均精确核对实际 identity。
+handler 必须与现场 form.onSubmit 和官方 bundle 中的同组件 listing form 绑定，且匹配已审计函数 hash；
+无 category 的 Matchbox 不要求 taxonomy，其他平台既有规则保持。所有自动提交开关仍为 false。
+原同批50站只读回归与安全证据见 `MATCHBOX_DISCOVERY_VERIFICATION.json`；不授权 LIVE 或 rollout。

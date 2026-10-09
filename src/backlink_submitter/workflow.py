@@ -11,7 +11,9 @@ from .contracts import (
     PROJECT,
     TARGET,
     classify,
+    composed_value,
     field_value,
+    identity_mapped,
     now,
     save_evidence,
     submit_once,
@@ -51,6 +53,8 @@ async def fill_fields(page, adapter, pack):
                 await control.select_option(label=value, timeout=10000)
             else:
                 await control.fill(value, timeout=10000)
+    for spec in adapter.get("composed_fields", {}).values():
+        await page.locator(spec["selector"]).fill(composed_value(pack, spec), timeout=10000)
     uploaded = {"logo": False, "screenshots": 0}
     if adapter.get("logo_selector"):
         logo = pack["logo_svg"] if adapter.get("logo_format") == "svg" else pack["logo_png"]
@@ -61,6 +65,21 @@ async def fill_fields(page, adapter, pack):
         await page.locator(adapter["screenshots_selector"]).set_input_files([str(p) for p in assets], timeout=10000)
         uploaded["screenshots"] = len(assets)
     return uploaded
+
+
+async def verify_identity(page, adapter, pack):
+    if not identity_mapped(adapter, pack):
+        raise ValueError("Required identity mapping missing")
+    for field, selector in adapter.get("fields", {}).items():
+        if field in {"Product / App Name", "Website URL", "Public Contact Email"}:
+            if await page.locator(selector).input_value(timeout=10000) != pack["fields"][field]:
+                raise ValueError("Actual DOM identity mismatch")
+    for spec in adapter.get("composed_fields", {}).values():
+        expected = composed_value(pack, spec)
+        actual = await page.locator(spec["selector"]).input_value(timeout=10000)
+        validate_payload(actual)
+        if actual != expected or "WYRPlay" not in actual or TARGET not in actual:
+            raise ValueError("Actual DOM composed identity mismatch")
 
 
 async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime, allow_submit, blacklisted):
@@ -91,12 +110,7 @@ async def run_submission(page, adapter, pack, api, *, row, backlink_id, runtime,
         "nodes=>nodes.map(e=>({name:e.name||e.id,value:e.type==='file'?[...e.files].map(f=>f.name):e.value}))"
     )
     validate_payload(values)  # inspect real form, not only the selected pack fields
-    for field, selector in adapter["fields"].items():
-        if field in {"Product / App Name", "Website URL", "Public Contact Email"}:
-            if await page.locator(selector).input_value(timeout=10000) != pack["fields"][field]:
-                raise ValueError("Actual DOM identity mismatch")
-    if not all(k in adapter["fields"] for k in ["Product / App Name", "Website URL"]):
-        raise ValueError("Required identity mapping missing")
+    await verify_identity(page, adapter, pack)
     # Selectors and taxonomy have to be qualified before this point; never infer an AI category.
     categories = [v["value"] for v in values if re.search(r"category|tags|product_type", v["name"], re.I)]
     if re.search(r"\b(?:AI Tool|AI Generator|LLM|GPT)\b", str(categories), re.I):

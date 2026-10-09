@@ -356,6 +356,25 @@ async def build_adapter(page, pack, domain):
     return (gate, None) if gate else ({"outcome": "READY_TO_SUBMIT", "reason": "DISCOVERY_ADAPTER_VERIFIED"}, adapter)
 
 
+def persist_adapter(pack, domain, adapter):
+    safe_artifact(adapter)
+    path = Path(pack["root"]) / "adapters" / (domain + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staged = path.with_suffix(".discovery")
+    try:
+        with staged.open("x") as stream:
+            stream.write(json.dumps(adapter, ensure_ascii=False, indent=2) + "\n")
+        try:
+            import os
+
+            os.link(staged, path)
+        finally:
+            staged.unlink()
+    except FileExistsError:
+        return None
+    return path
+
+
 async def discover(page, pack, job):
     domain = job["domain"]
 
@@ -371,6 +390,10 @@ async def discover(page, pack, job):
             await readonly_route(route)
 
     await page.route("**/*", official_readonly)
+    if domain == "askmatchbox.com":
+        from .matchbox import discover_matchbox
+
+        return await discover_matchbox(page, pack, job)
     visited: list[str] = []
     queue = [job["submit_url"]] if official_url(job.get("submit_url", ""), domain) else []
     home = "https://" + domain + "/"
@@ -394,21 +417,8 @@ async def discover(page, pack, job):
         if await page.locator("form").count():
             result, adapter = await build_adapter(page, pack, domain)
             if adapter:
-                safe_artifact(adapter)
-                path = Path(pack["root"]) / "adapters" / (domain + ".json")
-                path.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    # No overwrite, no git operation, and no partially readable adapter.
-                    staged = path.with_suffix(".discovery")
-                    with staged.open("x") as stream:
-                        stream.write(json.dumps(adapter, ensure_ascii=False, indent=2) + "\n")
-                    try:
-                        import os
-
-                        os.link(staged, path)
-                    finally:
-                        staged.unlink()
-                except FileExistsError:
+                path = persist_adapter(pack, domain, adapter)
+                if not path:
                     return dict(review("ADAPTER_REVIEW_REQUIRED"), discovery_visited=visited)
                 return dict(result, generated_adapter=str(path), discovery_visited=visited, submit_url=page.url)
             # A newsletter/search form on the homepage isn't proof of a submission form.

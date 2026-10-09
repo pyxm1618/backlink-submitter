@@ -140,6 +140,32 @@ def field_value(pack, field, *, required, platform, why="", possible_values=None
     }
 
 
+def composed_value(pack, spec):
+    """Only the two authoritative identity fields, in order; no template language."""
+    if spec.get("fields") != ["Product / App Name", "Website URL"] or spec.get("separator") not in {"\n", " - "}:
+        raise ValueError("Unverified composed identity specification")
+    values = [pack["fields"].get(field) for field in spec["fields"]]
+    validate_payload(values)
+    if values != ["WYRPlay", TARGET]:
+        raise ValueError("Composed identity differs from official project")
+    return spec["separator"].join(values)
+
+
+def identity_mapped(adapter, pack):
+    compositions = adapter.get("composed_fields", {})
+    if compositions:
+        if len(compositions) != 1:
+            raise ValueError("Only one composed identity field is supported")
+        spec = next(iter(compositions.values()))
+        composed_value(pack, spec)
+        if not spec.get("selector") or not spec.get("required"):
+            raise ValueError("Composed identity mapping must be explicit and required")
+        if any(field in adapter.get("fields", {}) for field in spec["fields"]):
+            raise ValueError("Duplicate separate/composed identity mappings")
+        return True
+    return all(field in adapter.get("fields", {}) for field in ["Product / App Name", "Website URL"])
+
+
 def select_description(pack, limit):
     choices = [
         pack["manifest"]["copy"][key]

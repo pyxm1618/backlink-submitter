@@ -1,0 +1,87 @@
+{
+  "domain": "askmatchbox.com",
+  "submit_url": "https://askmatchbox.com/founders",
+  "automatic_submit_allowed": false,
+  "reveal_action": {
+    "button_text": "Request a listing →",
+    "type": "button",
+    "readonly_required": true
+  },
+  "fields": {
+    "Public Contact Email": "#founder-request-email"
+  },
+  "composed_fields": {
+    "Product name + website": {
+      "selector": "#founder-request-notes",
+      "fields": [
+        "Product / App Name",
+        "Website URL"
+      ],
+      "separator": "\n",
+      "required": true
+    }
+  },
+  "required_fields": [
+    "Product name + website",
+    "Public Contact Email"
+  ],
+  "final_submit_selector": "form:has(#founder-request-notes):has(#founder-request-email) button[type=\"submit\"]",
+  "final_submit_text": "Add my product",
+  "final_action_verified": true,
+  "free_verified": true,
+  "login_required": false,
+  "reciprocal_required": false,
+  "qualification": "QUALIFIED_B",
+  "submission_request": {
+    "method": "POST",
+    "host": "askmatchbox.com",
+    "path": "/api/waitlist",
+    "verified": true
+  },
+  "provenance": {
+    "verified_at": "2026-10-09T00:50:06.832412+00:00",
+    "official_source": "https://askmatchbox.com/founders",
+    "free_evidence": "Listings stay free forever - including claiming and editing your matching data.",
+    "suitability_evidence": "catalog of small, useful products",
+    "field_evidence": [
+      {
+        "id": "founder-request-notes",
+        "type": "textarea",
+        "required": true,
+        "labels": [
+          "Product name + website"
+        ]
+      },
+      {
+        "id": "founder-request-email",
+        "type": "email",
+        "required": true,
+        "labels": [
+          "Your email"
+        ]
+      }
+    ],
+    "dispatch_evidence": {
+      "kind": "matchbox_bound_react_listing_handler",
+      "source_url": "https://askmatchbox.com/_next/static/chunks/0~__lpwq_0pn4.js",
+      "script_sha256": "f6cb1d7b7d425e5b7e609b1635bbe041eac059ae1967058e96c7a7e1f2e28df3",
+      "handler_sha256": "955ba6c35e730e967a6a907032b0343cc0c23b0353e8e10bd09c48e0a2e5a25e",
+      "form_selectors": [
+        "#founder-request-notes",
+        "#founder-request-email"
+      ],
+      "react_binding": "form.onSubmit -> observed live handler -> fetch",
+      "request_discriminator": {
+        "interest_type": "founder_listing"
+      },
+      "method": "POST",
+      "host": "askmatchbox.com",
+      "path": "/api/waitlist"
+    },
+    "final_action_evidence": {
+      "selector": "form:has(#founder-request-notes):has(#founder-request-email) button[type=\"submit\"]",
+      "text": "Add my product",
+      "unique_count": 1
+    }
+  }
+}
