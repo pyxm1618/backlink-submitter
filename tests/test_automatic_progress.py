@@ -267,7 +267,10 @@ def test_ordinary_login_posts_only_auth_then_continues(tmp_path):
     asyncio.run(run())
 
 
-def test_oauth_normal_session_continues_without_password(tmp_path):
+def test_oauth_normal_session_continues_without_password(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("backlink_submitter.automation.google_session_available", AsyncMock(return_value=True))
     from test_discovery import FORM
 
     from backlink_submitter.automation import AuthGuard, automatic_authentication
@@ -370,7 +373,7 @@ def test_google_alternative_before_password_not_false_owner_work():
     async def check(page):
         guard = AuthGuard("site.example")
         result = await automatic_authentication(page, load_project("wyrplay", Path("projects/wyrplay")), guard)
-        assert result["reason"] == "AUTO_OAUTH_BINDING_UNCONFIRMED"
+        assert result["reason"] == "GOOGLE_SESSION_UNAVAILABLE"
         assert result["outcome"] == "TEMPORARILY_UNAVAILABLE"
 
     asyncio.run(

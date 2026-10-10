@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from .batch import adapter_gate, assessment_result, official_url
-from .browser import verify_listing
+from .browser import isolated_profile, verify_listing
 from .contracts import (
     RECEIPTS,
     classify,
@@ -46,7 +46,7 @@ async def sheet_writer(runtime):
 
 @asynccontextmanager
 async def site_context(playwright, profile, *, headed=False, browser=None):
-    root = Path(profile).expanduser()
+    root = isolated_profile(profile)
     if (root / "SingletonLock").exists() or (root / "SingletonLock").is_symlink():
         raise ValueError("PROFILE_IN_USE")
     root.mkdir(parents=True, exist_ok=True)
@@ -65,6 +65,8 @@ async def site_context(playwright, profile, *, headed=False, browser=None):
                 service_workers="block",
                 ignore_default_args=["--use-mock-keychain"],
             )
+        if not browser:
+            context._backlink_profile = str(root)
         yield context
     finally:
         if context:
@@ -433,7 +435,7 @@ async def run_live_discovery(job, pack, api, playwright, prior, *, connector=Non
     opened_at = now()
     async with site_context(playwright, profile) as context:
         result = await discover(await context.new_page(), pack, job, on_ready=submit, connector=connector)
-    if result.get("oauth_flow_started"):
+    if result.get("reason") == "GOOGLE_SESSION_UNAVAILABLE":
         owner_profile = Path("~/.backlink-autofill/browser-profile").expanduser()
         if owner_profile.is_dir():
             profile_lock = pack.setdefault("owner_profile_lock", asyncio.Lock())
@@ -507,7 +509,7 @@ async def run_site(job, pack, api, playwright, *, connector=None):
             opened_at = now()
             result = await discover(await ctx.new_page(), pack, job)
         owner_profile = Path("~/.backlink-autofill/browser-profile").expanduser()
-        if result.get("oauth_flow_started") and owner_profile.is_dir():
+        if result.get("reason") == "GOOGLE_SESSION_UNAVAILABLE" and owner_profile.is_dir():
             # The initial station context is already closed. Reuse the existing Owner session
             # without cookie export or another simultaneous browser. Serialize this one profile.
             with (Path(job["runtime_root"]) / "owner-oauth-profile.lock").open("a") as profile_lock:

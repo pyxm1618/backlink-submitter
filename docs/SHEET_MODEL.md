@@ -34,7 +34,7 @@ AI-only、类别不匹配、项目资料缺失、CAPTCHA、登录、一次 OAuth
 | F | 最近操作时间 | 实际核验/执行更新时 UTC ISO-8601 |
 | G | 目标URL | https://www.wyrplay.com/ |
 | H | 结果链接 | 仅 E3 tracking 或 E4 listing；E1/E2 及无结果留空 |
-| I | 原因/备注 | 保留旧备注，追加事实与结论，不写邮件正文/OTP |
+| I | 原因/备注 | 一到两句中文说明当前情况、未提交原因与下一步；历史工程码保留在仓库外 evidence，不写邮件正文/OTP |
 | J | 证据摘要 | E码或资格/历史原因 + 核心摘要 + evidence 路径 |
 
 写 D:J 前重新读取 A:J，核对 A=wyrplay、B=当前 backlink_id，并检查预期旧快照。
@@ -53,3 +53,9 @@ Google Sheets values API 没有原子 compare-and-swap；当前实现先读后�
 `preflight --read-sheet` 使用 readonly scope、读取三张核心表、仅输出 WYRPlay 汇总，
 不持久化其他项目行/邮件/敏感备注。凭据通过外部文件，不进 Git。
 没有凭据/权限时报告依赖缺失，不伪造统计；新窗口需要已授权账户/connector 或现有 service account 文件。
+
+## 显示修正
+
+内部原因码继续保留；普通写入通过 `human_reason` 生成中文备注。既有工程备注改写前保存原文至仓库外 `runtime/wyrplay/sheet-display-history/`，J 列原证据不删。`write_display` / `write_display_batch` 只写精确 I 单元格；经授权的少量错误分类另写 D，不改 Attempt、时间、目标/结果 URL、证据摘要或 intent。每批最多25行，写前重新核对联合键和完整快照，写后完整 A:J 回读；冲突或结果不明确时停止，不自动重写。
+
+换链需 Owner 业务决定 → 去人工；网站禁止自动访问 → 去人工；当前付费/卡验证条件下没有可执行免费路径 → 暂时不可用。上述执行条件不等于 WYRPlay 项目不适用，不触发全局黑名单。

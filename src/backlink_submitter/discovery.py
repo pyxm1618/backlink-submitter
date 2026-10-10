@@ -619,9 +619,13 @@ async def discover(page, pack, job, *, connector=None, on_ready=None):
             if safe_url not in observed:
                 observed.append(safe_url)
             extra["discovery_visited"] = observed
-        page_title = await page.title()
-        field_labels = await page.locator("input,select,textarea").evaluate_all(
-            "es=>es.filter(e=>e.type!=='hidden'&&e.type!=='password').map(e=>({type:e.type,name:e.name,label:[...e.labels||[]].map(l=>l.innerText.trim()).join(' ')}))"
+        page_title = "" if page.is_closed() else await page.title()
+        field_labels = (
+            []
+            if page.is_closed()
+            else await page.locator("input,select,textarea").evaluate_all(
+                "es=>es.filter(e=>e.type!=='hidden'&&e.type!=='password').map(e=>({type:e.type,name:e.name,label:[...e.labels||[]].map(l=>l.innerText.trim()).join(' ')}))"
+            )
         )
         return dict(
             result,

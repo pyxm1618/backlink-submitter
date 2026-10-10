@@ -4,6 +4,8 @@ import json
 import re
 from urllib.parse import parse_qs, urljoin, urlparse
 
+from playwright.async_api import Error as PlaywrightError
+
 from .contracts import MemorySecret, extract_otp, mail_matches, now, timestamp
 
 AUTH_LABEL = re.compile(
@@ -25,8 +27,91 @@ OWNER_REASONS = {
 }
 
 
+def google_risk_marker(context):
+    from hashlib import sha256
+    from pathlib import Path
+
+    from .browser import isolated_profile
+
+    profile = getattr(context, "_backlink_profile", None)
+    if not profile:
+        return None
+    root = isolated_profile(profile)
+    if not root.is_relative_to(Path("~/.backlink-autofill").expanduser().resolve()):
+        return None
+    key = sha256(str(root).encode()).hexdigest()[:16]
+    return Path("~/.backlink-autofill/runtime/wyrplay/google-risk").expanduser() / f"{key}.json"
+
+
+def pause_google(context):
+    from .contracts import save_evidence
+
+    context._google_session_available = False
+    context._google_risk_seen = True
+    marker = google_risk_marker(context)
+    if marker is not None:
+        save_evidence(marker, {"project_id": "wyrplay", "reason": "GOOGLE_RISK_VERIFICATION", "checked_at": now()})
+
+
+async def google_session_available(page, *, expected_email):
+    """Read-only session check in an isolated context; never perform Google sign-in."""
+    from pathlib import Path
+
+    from .browser import isolated_profile
+
+    context = page.context
+    profile = getattr(context, "_backlink_profile", None)
+    if (
+        not expected_email
+        or not profile
+        or not isolated_profile(profile).is_relative_to(Path("~/.backlink-autofill").expanduser().resolve())
+    ):
+        return False
+    marker = google_risk_marker(context)
+    if getattr(context, "_google_risk_seen", False) or marker is not None and marker.exists():
+        context._google_risk_seen = True
+        return False
+    if getattr(context, "_google_session_checked", False):
+        return getattr(context, "_google_session_available", False)
+    context._google_session_checked = True
+    cookies = await context.cookies(["https://accounts.google.com"])
+    if not any(c["name"] in {"SID", "__Secure-1PSID", "__Secure-3PSID"} for c in cookies):
+        return False
+    probe = await context.new_page()
+    try:
+        await probe.goto("https://accounts.google.com/", wait_until="domcontentloaded", timeout=10000)
+        boundary = await owner_boundary(probe)
+        if boundary:
+            if boundary["reason"] == "GOOGLE_RISK_VERIFICATION":
+                pause_google(context)
+            return False
+        positive = probe.locator('a[href*="Logout"],a[href*="SignOutOptions"],[aria-label^="Google Account:"]')
+        account_text = (await probe.locator("body").inner_text()).casefold()
+        account_labels = await positive.evaluate_all("es=>es.map(e=>e.getAttribute('aria-label')||'').join(' ')")
+        available = any([await e.is_visible() for e in await positive.all()]) and expected_email.casefold() in (
+            account_text + account_labels.casefold()
+        )
+        context._google_session_available = available
+        return available
+    except PlaywrightError:
+        return False
+    finally:
+        await probe.close()
+
+
+def email_auth_label(label):
+    return bool(AUTH_LABEL.fullmatch(label) and "google" not in label.casefold())
+
+
 async def owner_boundary(page):
     text = (await page.locator("body").inner_text(timeout=10000)).casefold()
+    if urlparse(page.url).hostname in {"accounts.google.com", "myaccount.google.com"}:
+        password = page.locator('input[type="password"]')
+        if any([await e.is_visible() for e in await password.all()]) or re.search(
+            r"captcha|verify.*human|verify it.s you|suspicious activity|confirm.*device|device confirmation|two.step|2fa|authenticator|text message.*code|sms|recovery|unusual traffic|风险验证|设备确认|两步验证|找回账号",
+            text,
+        ):
+            return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "GOOGLE_RISK_VERIFICATION"}
     for pattern, reason in [
         (
             r"verify (?:you are|that you.re) human|checking your browser|请.*人机验证|完成.*滑块|(?:complete|solve|verify).*captcha",
@@ -48,7 +133,12 @@ async def owner_boundary(page):
         'iframe[src*="challenges.cloudflare.com"],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
     ).all():
         if await e.is_visible():
-            return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": "HUMAN_VERIFICATION_REQUIRED"}
+            reason = (
+                "GOOGLE_RISK_VERIFICATION"
+                if urlparse(page.url).hostname == "accounts.google.com"
+                else "HUMAN_VERIFICATION_REQUIRED"
+            )
+            return {"outcome": "HUMAN_VERIFICATION_REQUIRED", "reason": reason}
     return None
 
 
@@ -64,6 +154,8 @@ class AuthGuard:
         self.oauth_links = set()
         self.auth_hosts = set()
         self.oauth_active = False
+        self.oauth_attempted = False
+        self.oauth_stopped = False
         self.oauth_provider_seen = False
         self.registration_active = False
         self.login_active = False
@@ -84,6 +176,8 @@ class AuthGuard:
         )
 
     def navigation_allowed(self, url):
+        if self.oauth_stopped and urlparse(url).hostname == "accounts.google.com":
+            return False
         if self.same_site(url):
             return True
         if url in self.oauth_links:
@@ -170,6 +264,8 @@ class AuthGuard:
     def permits(self, method, url, payload, *, frame_url=""):
 
         p = urlparse(url)
+        if self.oauth_stopped and p.hostname == "accounts.google.com":
+            return False
         if self.matcher and (p.hostname, p.path) == (self.matcher["host"], self.matcher["path"]):
             return False
         if method in {"GET", "HEAD", "OPTIONS"}:
@@ -342,12 +438,32 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
     for key in ["automatic_login", "automatic_oauth", "automatic_email_verification"]:
         counts.setdefault(key, 0)
     await guard.observe(page)
+    if guard.same_site(page.url):
+        logout = page.get_by_role("link", name=re.compile(r"^(?:logout|log out|sign out|退出登录)$", re.I))
+        if any([await e.is_visible() for e in await logout.all()]):
+            return None
     pending_kind = None
     account_secret = connector.platform_password(guard.domain) if hasattr(connector, "platform_password") else None
     registration_attempted = False
     password_login_attempted = False
     for _ in range(8):
         boundary = await owner_boundary(page)
+        if boundary and boundary["reason"] == "GOOGLE_RISK_VERIFICATION":
+            guard.oauth_active = False
+            guard.oauth_stopped = True
+            pause_google(page.context)
+            await page.close()
+            return dict(boundary, oauth_flow_started=False)
+        if guard.oauth_stopped:
+            return {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": "GOOGLE_SESSION_UNAVAILABLE"}
+        if urlparse(page.url).hostname == "accounts.google.com":
+            identifier = page.locator('input[name="identifier"]')
+            if any([await e.is_visible() for e in await identifier.all()]):
+                guard.oauth_active = False
+                guard.oauth_stopped = True
+                page.context._google_session_available = False
+                await page.close()
+                return {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": "GOOGLE_SESSION_UNAVAILABLE"}
         creation = False
         if registration_attempted and re.search(r"/(?:register|signup|sign-up)(?:/|$)", urlparse(page.url).path):
             return {
@@ -423,36 +539,45 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             "link", name=re.compile(r"^(?:(?:continue|sign in|log in|login|sign up) with )?google$", re.I)
         )
         alternatives = [e for e in [*await google_controls.all(), *await google_links.all()] if await e.is_visible()]
-        if (
-            alternatives
-            and not creation
-            and not password_login_attempted
-            and (boundary is None or boundary["reason"] == "OWNER_PASSWORD_REQUIRED")
-            and pending_kind is None
-        ):
-            if len(alternatives) == 1 and guard.same_site(page.url):
-                guard.phase = "AUTH"
-                guard.oauth_active = True
-                await alternatives[0].click(timeout=10000)
-                await page.wait_for_timeout(1200)
-                pending_kind = "automatic_oauth"
-                continue
-        if boundary and boundary["reason"] == "OWNER_PASSWORD_REQUIRED" and alternatives:
-            if await google_links.count() == 1:
-                href = await google_links.get_attribute("href")
-                url = urljoin(page.url, href or "")
-                if url in guard.oauth_links or guard.same_site(url):
+        email_controls = page.locator(
+            'input[type="email"],input[autocomplete="username"],input[autocomplete="one-time-code"],input[name="otp"]'
+        )
+        email_available = any([await e.is_visible() for e in await email_controls.all()])
+        email_links = page.get_by_role(
+            "link",
+            name=re.compile(
+                r"^(?:sign up|register|create (?:a free |an? )?account|continue with email|sign in with email|magic link)$",
+                re.I,
+            ),
+        )
+        visible_email_links = [e for e in await email_links.all() if await e.is_visible()]
+        if alternatives and not creation and not password_login_attempted and pending_kind is None:
+            if visible_email_links and guard.same_site(page.url):
+                href = await visible_email_links[0].get_attribute("href")
+                if href and guard.same_site(urljoin(page.url, href)) and urljoin(page.url, href) != page.url:
+                    await visible_email_links[0].click(timeout=10000)
+                    await page.wait_for_timeout(300)
+                    continue
+            if not email_available or boundary and boundary["reason"] == "OWNER_PASSWORD_REQUIRED":
+                if guard.oauth_attempted:
+                    return {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": "OAUTH_SESSION_OR_CONSENT_UNCONFIRMED"}
+                mailbox_profile = await connector("get_profile", {}) if connector is not None else {}
+                if not await google_session_available(page, expected_email=mailbox_profile.get("email", "")):
+                    reason = (
+                        "GOOGLE_RISK_VERIFICATION"
+                        if getattr(page.context, "_google_risk_seen", False)
+                        else "GOOGLE_SESSION_UNAVAILABLE"
+                    )
+                    guard.oauth_stopped = True
+                    return {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": reason, "oauth_flow_started": False}
+                if len(alternatives) == 1 and guard.same_site(page.url):
                     guard.phase = "AUTH"
                     guard.oauth_active = True
-                    await google_links.click(timeout=10000)
-                    await page.wait_for_timeout(300)
+                    guard.oauth_attempted = True
+                    await alternatives[0].click(timeout=10000)
+                    await page.wait_for_timeout(1200)
                     pending_kind = "automatic_oauth"
                     continue
-            return {
-                "outcome": "TEMPORARILY_UNAVAILABLE",
-                "reason": "AUTO_OAUTH_BINDING_UNCONFIRMED",
-                "automation_pending": True,
-            }
         if (
             boundary
             and boundary["reason"] == "OWNER_PASSWORD_REQUIRED"
@@ -561,36 +686,10 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             del secret
             pending_kind = "automatic_email_verification"
             continue
-        # Reuse an existing platform session: absence of auth controls requires no login click.
-        links = page.get_by_role("link").filter(
-            has_text=re.compile(r"^(?:continue|sign in|login|log in) with google$", re.I)
-        )
-        if await links.count() == 1:
-            href = await links.get_attribute("href")
-            url = urljoin(page.url, href or "")
-            if url in guard.oauth_links or guard.same_site(url):
-                guard.phase = "AUTH"
-                guard.oauth_active = True
-                await links.click(timeout=10000)
-                await page.wait_for_timeout(300)
-                pending_kind = "automatic_oauth"
-                continue
         if (urlparse(page.url).hostname or "") == "accounts.google.com":
-            # Account identity comes from the connected Owner mailbox, never another project.
-            identifier = page.locator('input[name="identifier"]')
-            if await identifier.count() == 1 and await identifier.is_visible() and connector is not None:
-                profile = await connector("get_profile", {})
-                if profile.get("email"):
-                    counts["registration_email"] = profile["email"]
-                    await identifier.fill(profile["email"])
-                    next_button = page.get_by_role("button", name=re.compile(r"^(?:Next|下一步)$", re.I))
-                    if await next_button.count() == 1:
-                        await next_button.click(timeout=10000)
-                        await page.wait_for_timeout(1000)
-                        continue
             # Exactly one existing account; never supply a password or invent an identity.
             choices = page.locator("[data-identifier]")
-            if await choices.count() > 1 and connector is not None:
+            if await choices.count() > 1 and connector is not None and not counts.get("google_account_selected"):
                 profile = await connector("get_profile", {})
                 matching = [
                     e
@@ -600,16 +699,28 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                 ]
                 if len(matching) == 1:
                     counts["registration_email"] = profile["email"]
+                    counts["google_account_selected"] = True
                     await matching[0].click(timeout=10000)
                     await page.wait_for_timeout(800)
                     continue
-            if await choices.count() == 1:
+            if await choices.count() == 1 and not counts.get("google_account_selected"):
+                mailbox_profile = await connector("get_profile", {}) if connector is not None else {}
+                if (await choices.get_attribute("data-identifier") or "").casefold() != mailbox_profile.get(
+                    "email", ""
+                ).casefold():
+                    guard.oauth_active = False
+                    guard.oauth_stopped = True
+                    page.context._google_session_available = False
+                    await page.close()
+                    return {"outcome": "TEMPORARILY_UNAVAILABLE", "reason": "GOOGLE_SESSION_UNAVAILABLE"}
+                counts["google_account_selected"] = True
                 await choices.click(timeout=10000)
                 await page.wait_for_timeout(300)
                 continue
             consent = page.get_by_role("button", name=re.compile(r"^(?:Continue|Allow|继续|允许)$", re.I))
             visible_consent = [e for e in await consent.all() if await e.is_visible()]
-            if len(visible_consent) == 1:
+            if len(visible_consent) == 1 and not counts.get("google_consent_clicked"):
+                counts["google_consent_clicked"] = True
                 await visible_consent[0].click(timeout=10000)
                 await page.wait_for_timeout(800)
                 continue
@@ -636,7 +747,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             labels = await form.locator('button,input[type="submit"]').evaluate_all(
                 'es=>es.map(e=>e.innerText.trim()||e.value||"")'
             )
-            if any(AUTH_LABEL.fullmatch(x) for x in labels):
+            if any(email_auth_label(x) for x in labels):
                 chosen = form
                 break
         if chosen is None:
@@ -685,7 +796,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
         legal = [
             b
             for b in await button.all()
-            if AUTH_LABEL.fullmatch((await b.inner_text()).strip() or (await b.get_attribute("value") or ""))
+            if email_auth_label((await b.inner_text()).strip() or (await b.get_attribute("value") or ""))
         ]
         if len(legal) != 1:
             return {

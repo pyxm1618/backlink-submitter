@@ -63,11 +63,14 @@ Owner 确认后写 `projects/wyrplay/confirmed_facts.json`：
 
 Playwright + Chrome Chromium 内核 + headless，默认 service_workers=block。
 专用 profile 是仓库外 `~/.backlink-autofill/browser-profile`，不复制 cookie/profile 到 Git。
-当前 live handoff 已证明要 `ignore_default_args=['--use-mock-keychain']` 匹配 Owner 正常 Chrome 钥匙串。
+现有专用目录保持既有加密启动参数；不执行 Keychain 修改、密码库操作或个人浏览器修复。
 Profile 有 SingletonLock：不删除锁、不杀所有 Chrome；Owner 正常关闭专用窗口后继续。
 Owner 登录 Google 不等于每个平台已登录。真实检查平台 session，一站一 context/page 保持
 OAuth -> onboarding -> form -> upload -> final action 连续性；不要中间关闭导致 SPA/session 丢失。
-可以正常使用 Owner 已登录 Google 账户，禁止密码重输/挑战/2FA/风险绕过。
+所有 persistent browser / human-loop 入口先校验 Profile：禁止日常 Chrome、Default/Profile*、Tabbit 和指向这些位置的软链接；不清 Cookie、不复制登录态、不删除锁、不终止日常 Chrome。
+登录优先级：已有平台 session → 普通邮箱注册/登录 → 既有 Gmail connector 的 OTP/magic link → 专用 Profile 已确认有效且匹配认证邮箱的 Google session。Google Cookie 存在本身不算有效会话；只读检查需看到匹配账号及已登录界面，没有确认则 `GOOGLE_SESSION_UNAVAILABLE`，不输入 Google 标识或密码重新登录。
+Google 风险验证（密码重输、CAPTCHA、Verify it's you、设备/2FA/Recovery 等）立即关闭当前 OAuth，记录 `GOOGLE_RISK_VERIFICATION`。仓库外 `runtime/wyrplay/google-risk/` 保留暂停标记，后续站点不得自动再试；邮箱认证仍可继续。恢复 Google 流程必须有新的 Owner 指令及专用会话核验，不能靠重开 context 清除风险。
+每个平台 OAuth 最多启动一次、账号选择和 consent 各一次；登录不明确时不重新发起 Google 登录。
 任何 CAPTCHA/Cloudflare Human Verification/设备确认 -> HUMAN_VERIFICATION_REQUIRED，停在现场给 Owner。
 正常 batch 仅 headless；只有 Owner 显式运行 `handoff --owner-human-action` 或 `human-loop --owner-human-action` 才逐站打开 dedicated headed 窗口。
 人工步骤由 Owner 完成，最终提交 endpoint 被拦截；随后 `resume` 重新核验，不能自动绕过挑战。

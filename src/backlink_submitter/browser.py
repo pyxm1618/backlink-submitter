@@ -9,10 +9,28 @@ from urllib.parse import urlparse
 from .contracts import now
 
 
+def isolated_profile(profile):
+    """Reject personal browser data, including aliases resolving into it, before any write."""
+    root = Path(profile).expanduser().resolve()
+    home = Path.home().resolve()
+    personal = [home / "Library/Application Support/Google/Chrome", home / "Library/Application Support/Chromium"]
+    parts = [part.casefold() for part in root.parts]
+    if (
+        any(root == p or root in p.parents or p in root.parents for p in personal)
+        or any("tabbit" in part for part in parts)
+        or any(part == "default" or re.fullmatch(r"profile[ _]\d+", part) for part in parts)
+        or any(parts[i : i + 2] == ["google", "chrome"] for i in range(len(parts) - 1))
+    ):
+        raise ValueError("AUTOMATION_PROFILE_FORBIDDEN: personal Chrome/Tabbit data must remain untouched")
+    if (root / "Default").is_symlink() and not (root / "Default").resolve().is_relative_to(root):
+        raise ValueError("AUTOMATION_PROFILE_FORBIDDEN: profile alias leaves isolated data directory")
+    return root
+
+
 @asynccontextmanager
 async def browser_session(playwright, *, profile=None):
     if profile:
-        root = Path(profile).expanduser()
+        root = isolated_profile(profile)
         if (root / "SingletonLock").is_symlink() or (root / "SingletonLock").exists():
             raise ValueError("PROFILE_IN_USE: Owner must normally close only the dedicated browser; never delete lock")
         context = await playwright.chromium.launch_persistent_context(
@@ -22,6 +40,7 @@ async def browser_session(playwright, *, profile=None):
             service_workers="block",
             ignore_default_args=["--use-mock-keychain"],
         )
+        context._backlink_profile = str(root)
         try:
             yield context
         finally:

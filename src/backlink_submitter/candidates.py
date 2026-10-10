@@ -190,7 +190,11 @@ def action_result(result, basis=None):
         "TEMPORARILY_UNAVAILABLE": "暂时不可用",
         "GLOBAL_BLACKLIST": "全局黑名单",
     }
-    if outcome in known:
+    if reason in {"RECIPROCAL_REQUIRED", "AUTOMATED_ACCESS_FORBIDDEN"}:
+        status = "去人工"
+    elif reason in {"PAYMENT_ONLY_FOR_CURRENT_PATH", "GOOGLE_SESSION_UNAVAILABLE"}:
+        status = "暂时不可用"
+    elif outcome in known:
         status = known[outcome]
     elif reason in {"WORKER_TIMEOUT", "WORKER_CRASH_OR_INVALID_RESULT"}:
         status = "暂时不可用"

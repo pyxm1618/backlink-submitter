@@ -233,7 +233,8 @@ def test_human_queues_runtime_hint_but_dry_never_writes_sheet(tmp_path):
     assert api.writes == 1 and api.row[3] == "去人工" and api.row[4] == ""
 
 
-def test_batch_uses_real_single_engine_dispatch_evidence_and_attempt_receipt(tmp_path):
+def test_batch_uses_real_single_engine_dispatch_evidence_and_attempt_receipt(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
     assert importlib.util.find_spec("backlink_submitter.batch_worker") is not None, "Site worker missing"
     from playwright.async_api import async_playwright
     from test_contracts import SheetAPI
@@ -285,7 +286,11 @@ def test_batch_uses_real_single_engine_dispatch_evidence_and_attempt_receipt(tmp
             result = await execute_ready(page, adapter, pack, api, job)
             assert result["outcome"] == "PENDING" and api.row[4] == "1"
             assert adapter["automatic_submit_allowed"] is False
-            assert "Original qualification note" in api.row[8] and "Original provenance" in api.row[9]
+            assert "已提交" in api.row[8] and "Original provenance" in api.row[9]
+            histories = list((tmp_path / ".backlink-autofill/runtime/wyrplay/sheet-display-history").glob("*.json"))
+            assert any(
+                json.loads(path.read_text()).get("prior_note") == "Original qualification note" for path in histories
+            )
             with pytest.raises(ValueError):
                 await execute_ready(page, adapter, pack, api, job)
             assert api.writes == 1
