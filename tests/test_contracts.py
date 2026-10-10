@@ -185,6 +185,16 @@ def test_no_new_bound_receipt_is_never_pending_or_success(contract, before, afte
     assert result["result_url"] == ""
 
 
+@pytest.mark.parametrize("submitted,preexisting", [(True, False), (True, True), (False, False)])
+def test_matchbox_review_receipt_requires_new_final_submission(contract, submitted, preexisting):
+    receipt = (
+        "You’re in - we’ll review your product, add it, and email you a link to claim and customise it, "
+        "usually within a day."
+    )
+    result = contract.classify(receipt if preexisting else "Add my product", receipt, submitted=submitted)
+    assert result["status"] == ("审核中" if submitted and not preexisting else "需人工核查" if submitted else "待提交")
+
+
 def test_e1_new_receipt_only_pending(contract):
     result = contract.classify("Submit product", "Submission received", submitted=True)
     assert (result["status"], result["evidence_code"], result["result_url"]) == ("审核中", "E1", "")

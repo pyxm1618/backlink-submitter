@@ -56,6 +56,7 @@ RECEIPTS = (
     "awaiting moderation",
     "queued for review",
     "under review",
+    "we’ll review your product, add it",
 )
 
 
