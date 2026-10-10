@@ -13,6 +13,7 @@ from .browser import verify_listing
 from .contracts import (
     RECEIPTS,
     classify,
+    email_pending,
     field_value,
     load_project,
     now,
@@ -22,7 +23,7 @@ from .contracts import (
     validate_payload,
 )
 from .sheets import append_global_blacklist, full_row, is_blacklisted, service, write_outcome
-from .workflow import fill_fields, human_boundary, run_submission, verify_identity
+from .workflow import fill_fields, human_boundary, run_submission, validate_final_form, verify_identity
 
 
 @asynccontextmanager
@@ -218,11 +219,7 @@ async def prepare_form(page, adapter, pack):
         or (await final.inner_text()).strip() != adapter["final_submit_text"]
     ):
         raise ValueError("FINAL_ACTION_CHANGED")
-    invalid = await page.locator("input,select,textarea").evaluate_all(
-        "es=>es.filter(e=>e.willValidate&&!e.checkValidity()).map(e=>e.name||e.id||'unknown')"
-    )
-    if invalid:
-        raise ValueError("OWNER_INPUT_REQUIRED")
+    await validate_final_form(page, adapter, pack, repair=True)
     values = await page.locator("input:not([type=password]),select,textarea").evaluate_all(
         "es=>es.map(e=>e.type==='file'?[...e.files].map(f=>f.name):e.value)"
     )
@@ -288,7 +285,7 @@ async def execute_ready(page, adapter, pack, api, job):
     }
 
 
-async def followup_proofs(page, adapter, api, job, *, before_receipts):
+async def followup_proofs(page, adapter, api, job, *, before_receipts, connector=None):
     """Observed URLs only; proof upgrade never increments Attempt a second time."""
     intent = Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")
     receipt = json.loads(intent.read_text())
@@ -337,6 +334,28 @@ async def followup_proofs(page, adapter, api, job, *, before_receipts):
                             break
             finally:
                 await asyncio.wait_for(browser.close(), 10)
+    if not proof and connector is not None:
+        recipient = "support@wyrplay.com"
+        try:
+            messages = await connector(
+                "search_messages",
+                {
+                    "query": f"to:{recipient} from:{job['domain']} after:{int(timestamp(receipt['started_at']).timestamp())} -in:spam -in:trash",
+                    "max_results": 5,
+                },
+            )
+        except (ConnectionError, OSError):
+            save_evidence(
+                Path(job["evidence_dir"]) / "post-mail-check.json", {"outcome": "EMAIL_CONFIRMATION_UNAVAILABLE"}
+            )
+            messages = None
+        matched = [
+            p
+            for m in messages or []
+            if (p := email_pending(m, domain=job["domain"], recipient=recipient, started_at=receipt["started_at"]))
+        ]
+        if len(matched) == 1:
+            proof = matched[0]
     if not proof:
         return None
     result = (
@@ -376,9 +395,27 @@ async def run_live_discovery(job, pack, api, playwright, prior, *, connector=Non
     from .discovery import discover
 
     async def submit(page, adapter):
-        await prepare_form(page, adapter, pack)
+        try:
+            await prepare_form(page, adapter, pack)
+        except ValueError as exc:
+            if str(exc).startswith(("FORM_VALIDATION_UNRESOLVED", "APPROVED_TEXT_DOES_NOT_FIT")):
+                return {
+                    "outcome": "TEMPORARILY_UNAVAILABLE",
+                    "reason": "FORM_VALIDATION_UNRESOLVED",
+                    "validation_fields": str(exc).split(":", 1)[-1].strip().split(", "),
+                    "reached_submit": True,
+                    "submit_clicked": False,
+                    "filled_fields": list(adapter["fields"]),
+                    "automation_pending": True,
+                }
+            raise
         result = await execute_ready(page, adapter, pack, api, dict(job, submit_url=page.url))
-        final = await followup_proofs(page, adapter, api, job, before_receipts=result["before_receipts"]) or result
+        final = (
+            await followup_proofs(
+                page, adapter, api, job, before_receipts=result["before_receipts"], connector=connector
+            )
+            or result
+        )
         intent = json.loads(
             (Path(job["runtime_root"]) / "submit-intents/wyrplay" / (job["backlink_id"] + ".json")).read_text()
         )
@@ -399,8 +436,10 @@ async def run_live_discovery(job, pack, api, playwright, prior, *, connector=Non
     if result.get("oauth_flow_started"):
         owner_profile = Path("~/.backlink-autofill/browser-profile").expanduser()
         if owner_profile.is_dir():
-            async with site_context(playwright, owner_profile) as context:
-                result = await discover(await context.new_page(), pack, job, on_ready=submit, connector=connector)
+            profile_lock = pack.setdefault("owner_profile_lock", asyncio.Lock())
+            async with profile_lock:
+                async with site_context(playwright, owner_profile) as context:
+                    result = await discover(await context.new_page(), pack, job, on_ready=submit, connector=connector)
     if job.get("owner_human_action") and result.get("owner_action_proof") and not pack.get("human_window_used"):
         from .automation import AuthGuard, fill_known_controls, owner_boundary
 

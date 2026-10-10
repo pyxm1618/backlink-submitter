@@ -1,8 +1,11 @@
 """Read-only adapter for an existing connected Gmail tool invoker; never a second OAuth."""
 
+import asyncio
 import base64
 import json
 from datetime import datetime, timezone
+
+from .contracts import MemorySecret
 
 
 def decoded_result(result):
@@ -48,6 +51,8 @@ class ConnectedGmail:
 
     def __init__(self, invoke):
         self.invoke = invoke
+        self.account_credentials: dict[str, MemorySecret] = {}
+        self.account_emails: dict[str, str] = {}
 
     async def new_account_password(self, domain):
         from .contracts import MemorySecret
@@ -56,7 +61,19 @@ class ConnectedGmail:
         value = reply.get("value")
         if not isinstance(value, str) or not value:
             raise ConnectionError("NEW_ACCOUNT_CREDENTIAL_UNAVAILABLE")
-        return MemorySecret(value)
+        secret = MemorySecret(value)
+        self.account_credentials[domain] = secret
+        email = reply.get("email")
+        if isinstance(email, str) and "@" in email:
+            self.account_emails[domain] = email
+        return secret
+
+    def platform_password(self, domain):
+        """Only credentials created in this run; never an identity-provider password."""
+        return self.account_credentials.get(domain)
+
+    def platform_email(self, domain):
+        return self.account_emails.get(domain)
 
     async def __call__(self, operation, arguments):
         if operation == "get_profile":
@@ -75,7 +92,20 @@ class ConnectedGmail:
         return messages
 
 
+_stdio_lock: asyncio.Lock | None = None
+
+
 async def stdio_invoke(operation, arguments):
+    import asyncio
+
+    global _stdio_lock
+    if _stdio_lock is None:
+        _stdio_lock = asyncio.Lock()
+    async with _stdio_lock:
+        return await _stdio_exchange(operation, arguments)
+
+
+async def _stdio_exchange(operation, arguments):
     """Host performs the existing connector call; replies travel on stdin, never disk."""
     import asyncio
     import sys

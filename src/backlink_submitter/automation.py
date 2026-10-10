@@ -66,6 +66,7 @@ class AuthGuard:
         self.oauth_active = False
         self.oauth_provider_seen = False
         self.registration_active = False
+        self.login_active = False
         self.verification_families = set()
         self.blocked_writes = 0
         self.auth_requests = 0
@@ -203,7 +204,7 @@ class AuthGuard:
                 return True
         if self.phase not in {"AUTH", "VERIFICATION"}:
             return False
-        if self.live and self.registration_active and self.same_site(url):
+        if self.live and (self.registration_active or self.login_active) and self.same_site(url):
             # This phase follows the observed account-creation button with approved auth fields.
             # Next/React actions need not expose a conventional form-encoded payload.
             return not isinstance(payload, dict) or not any(
@@ -219,7 +220,7 @@ class AuthGuard:
             return True
         if self.oauth_active and self.phase == "AUTH" and self.same_site(url):
             # The observed Google button may initiate a SPA/server action. No adapter is needed.
-            if isinstance(payload, dict) and not any(
+            if not isinstance(payload, dict) or not any(
                 re.search(r"product|website|listing|description", k, re.I) for k in payload
             ):
                 return True
@@ -292,6 +293,12 @@ async def mailbox_challenge(connector, *, domain, recipient, started_at, length)
     )
     found = []
     for message in messages:
+        if re.search(
+            r"password reset|account recovery|reset your password|payment verification|security alert",
+            message.get("subject", ""),
+            re.I,
+        ):
+            continue
         if not mail_matches(message, domain=domain, recipient=recipient, started_at=started_at):
             continue
         if (
@@ -310,11 +317,24 @@ async def mailbox_challenge(connector, *, domain, recipient, started_at, length)
                 if (
                     (p.hostname or "").removeprefix("www.") == domain.removeprefix("www.")
                     and re.search(r"auth|verify|confirm|magic|login", p.path, re.I)
+                    and not re.search(r"reset|recover|unsubscribe|oauth|payment", p.path, re.I)
                     and not p.username
                     and not p.password
                 ):
                     found.append(link.rstrip("."))
     return MemorySecret(found[0]) if len(set(found)) == 1 else None
+
+
+async def wait_for_mail(connector, **binding):
+    import asyncio
+
+    for attempt in range(3):
+        secret = await mailbox_challenge(connector, **binding)
+        if secret is not None:
+            return secret
+        if attempt < 2:
+            await asyncio.sleep(5)
+    return None
 
 
 async def automatic_authentication(page, pack, guard, *, connector=None, counters=None):
@@ -323,7 +343,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
         counts.setdefault(key, 0)
     await guard.observe(page)
     pending_kind = None
-    account_secret = None
+    account_secret = connector.platform_password(guard.domain) if hasattr(connector, "platform_password") else None
     registration_attempted = False
     password_login_attempted = False
     for _ in range(8):
@@ -338,7 +358,9 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
         if boundary and boundary["reason"] == "OWNER_PASSWORD_REQUIRED" and guard.same_site(page.url):
             passwords = [e for e in await page.locator('input[type="password"]').all() if await e.is_visible()]
             text = (await page.locator("body").inner_text()).casefold()
-            if registration_attempted:
+            if account_secret is not None and not re.search(
+                r"/(?:register|signup|sign-up)(?:/|$)", urlparse(page.url).path
+            ):
                 if len(passwords) == 1 and account_secret is not None and not password_login_attempted:
                     await passwords[0].fill(account_secret.value)
                     password_login_attempted = True
@@ -404,6 +426,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
         if (
             alternatives
             and not creation
+            and not password_login_attempted
             and (boundary is None or boundary["reason"] == "OWNER_PASSWORD_REQUIRED")
             and pending_kind is None
         ):
@@ -462,8 +485,11 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                 },
             )
         text = (await page.locator("body").inner_text()).casefold()
-        otp = page.locator('input[autocomplete="one-time-code"]')
+        otp = page.locator(
+            'input[autocomplete="one-time-code"],input[name="otp"],input[name="verification_code"],input[name="code"]'
+        )
         if await otp.count() == 1:
+            counts["gmail_challenge_triggered"] = 1
             if connector is None:
                 return {
                     "outcome": "TEMPORARILY_UNAVAILABLE",
@@ -478,11 +504,11 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                     "automation_pending": True,
                 }
             try:
-                secret = await mailbox_challenge(
+                secret = await wait_for_mail(
                     connector,
                     domain=guard.domain,
-                    recipient=pack["fields"]["Public Contact Email"],
-                    started_at=counts["email_requested_at"],
+                    recipient=counts.get("registration_email", pack["fields"]["Public Contact Email"]),
+                    started_at=counts.get("email_requested_at", now()),
                     length=int(size),
                 )
             except (ConnectionError, OSError):
@@ -501,8 +527,10 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             del secret
             pending_kind = "automatic_email_verification"
         elif re.search(
-            r"check your (?:email|inbox).*(?:magic|sign.in|confirm|verify)|magic link.*(?:sent|email)", text
+            r"check your (?:email|inbox).*(?:magic|sign.in|confirm|verify)|magic link.*(?:sent|email)|(?:verification|confirmation) email.{0,50}sent|confirm your email|verify your email address",
+            text,
         ):
+            counts["gmail_challenge_triggered"] = 1
             if connector is None or "email_requested_at" not in counts:
                 return {
                     "outcome": "TEMPORARILY_UNAVAILABLE",
@@ -510,10 +538,10 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                     "automation_pending": True,
                 }
             try:
-                secret = await mailbox_challenge(
+                secret = await wait_for_mail(
                     connector,
                     domain=guard.domain,
-                    recipient=pack["fields"]["Public Contact Email"],
+                    recipient=counts.get("registration_email", pack["fields"]["Public Contact Email"]),
                     started_at=counts["email_requested_at"],
                     length=None,
                 )
@@ -553,6 +581,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             if await identifier.count() == 1 and await identifier.is_visible() and connector is not None:
                 profile = await connector("get_profile", {})
                 if profile.get("email"):
+                    counts["registration_email"] = profile["email"]
                     await identifier.fill(profile["email"])
                     next_button = page.get_by_role("button", name=re.compile(r"^(?:Next|下一步)$", re.I))
                     if await next_button.count() == 1:
@@ -561,6 +590,19 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                         continue
             # Exactly one existing account; never supply a password or invent an identity.
             choices = page.locator("[data-identifier]")
+            if await choices.count() > 1 and connector is not None:
+                profile = await connector("get_profile", {})
+                matching = [
+                    e
+                    for e in await choices.all()
+                    if (await e.get_attribute("data-identifier") or "").casefold()
+                    == profile.get("email", "").casefold()
+                ]
+                if len(matching) == 1:
+                    counts["registration_email"] = profile["email"]
+                    await matching[0].click(timeout=10000)
+                    await page.wait_for_timeout(800)
+                    continue
             if await choices.count() == 1:
                 await choices.click(timeout=10000)
                 await page.wait_for_timeout(300)
@@ -578,7 +620,7 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             }
         auth_links = page.get_by_role("link", name=re.compile(r"^(?:sign in|log in|login|登录)$", re.I))
         visible_links = [link for link in await auth_links.all() if await link.is_visible()]
-        if len(visible_links) == 1 and pending_kind is None:
+        if len(visible_links) == 1 and (pending_kind is None or account_secret is not None):
             href = await visible_links[0].get_attribute("href")
             if href and guard.same_site(urljoin(page.url, href)) and urljoin(page.url, href) != page.url:
                 guard.phase = "AUTH"
@@ -635,7 +677,10 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
                 await username.fill(brand)
         email = chosen.locator('input[type="email"],input[autocomplete="username"]')
         if await email.count() == 1:
-            await email.fill(pack["fields"]["Public Contact Email"])
+            account_email = connector.platform_email(guard.domain) if hasattr(connector, "platform_email") else None
+            account_email = account_email or pack["fields"]["Public Contact Email"]
+            await email.fill(account_email)
+            counts["registration_email"] = account_email
         button = chosen.locator('button,input[type="submit"]')
         legal = [
             b
@@ -650,11 +695,12 @@ async def automatic_authentication(page, pack, guard, *, connector=None, counter
             }
         guard.phase = "VERIFICATION" if pending_kind == "automatic_email_verification" else "AUTH"
         guard.registration_active = creation
+        guard.login_active = password_login_attempted
         registration_attempted = registration_attempted or creation
         counts.setdefault("email_requested_at", now())
         clicked_label = (await legal[0].inner_text()).strip()
         await legal[0].click(timeout=10000)
-        await page.wait_for_timeout(800)
+        await page.wait_for_timeout(1800)
         if (
             (creation or password_login_attempted)
             and await legal[0].count() == 1
@@ -713,7 +759,7 @@ async def advance_local_step(page, pack, guard):
 
 async def fill_known_controls(page, pack, domain):
     """Fill approved facts before handing over a genuine password or challenge."""
-    from .contracts import field_value
+    from .contracts import field_value, fitting_field_value
     from .discovery import controls, selector_for, semantic_field
 
     filled = []
@@ -735,6 +781,7 @@ async def fill_known_controls(page, pack, domain):
         value = field_value(pack, field, required=False, platform=domain)
         if not value:
             continue
+        value = fitting_field_value(pack, field, value, control["maxLength"])
         locator = page.locator(selector)
         if await locator.input_value() == value:
             filled.append(field)

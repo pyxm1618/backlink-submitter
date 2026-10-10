@@ -78,6 +78,22 @@ def test_actual_browser_dispatch_controls_attempt(tmp_path, case, expected_incre
                 await page.goto(adapter["submit_url"])
                 await fill_fields(page, adapter, pack)
                 api = SheetAPI()
+                if case == "html_validation":
+                    with pytest.raises(ValueError, match="FORM_VALIDATION_UNRESOLVED"):
+                        await run_submission(
+                            page,
+                            adapter,
+                            pack,
+                            api,
+                            row=2,
+                            backlink_id="site.example",
+                            runtime=tmp_path,
+                            allow_submit=True,
+                            blacklisted=False,
+                        )
+                    assert api.writes == 0
+                    assert not (tmp_path / "submit-intents/wyrplay/site.example.json").exists()
+                    return
                 result = await run_submission(
                     page,
                     adapter,

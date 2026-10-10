@@ -49,6 +49,13 @@ RECEIPTS = (
     "awaiting approval",
     "listing submitted",
     "submitted for review",
+    "successfully submitted",
+    "submitted successfully",
+    "submission successful",
+    "pending moderation",
+    "awaiting moderation",
+    "queued for review",
+    "under review",
 )
 
 
@@ -194,6 +201,16 @@ def select_description(pack, limit):
     raise ValueError("OWNER_INPUT_REQUIRED: no approved description fits; do not truncate or invent")
 
 
+def fitting_field_value(pack, field, value, limit):
+    if not isinstance(limit, int) or limit <= 0 or not isinstance(value, str) or len(value) <= limit:
+        return value
+    if "Description" in field:
+        return select_description(pack, limit)
+    if field == "One-line Pitch / Tagline" and len(pack["fields"]["Short Title"]) <= limit:
+        return pack["fields"]["Short Title"]
+    raise ValueError("APPROVED_TEXT_DOES_NOT_FIT")
+
+
 def safe_artifact(value):
     """Fail before persistence, not after leaking. Bodies/cookies/auth data are never artifacts."""
     if isinstance(value, MemorySecret):
@@ -311,6 +328,18 @@ async def submit_once(
     except FileExistsError:
         raise ValueError("Existing submit intent; no automatic duplicate/retry") from None
     observed = asyncio.Event()
+    native_action = None
+    if page is not None and matcher is None:
+        forms = await page.locator("form").evaluate_all(
+            "(es,identity)=>es.filter(f=>[...f.elements].some(e=>e.value===identity[0])&&[...f.elements].some(e=>e.value===identity[1])&&f.method.toUpperCase()==='POST').map(f=>f.action)",
+            ["WYRPlay", TARGET],
+        )
+        if len(forms) == 1:
+            parsed = urlparse(forms[0])
+            if parsed.scheme == "https" and (parsed.hostname or "").removeprefix("www.") == (
+                urlparse(page.url).hostname or ""
+            ).removeprefix("www."):
+                native_action = {"method": "POST", "host": parsed.hostname, "path": parsed.path}
     submission_host = (
         (urlparse(page.url).hostname or "").removeprefix("www.") if page is not None and matcher is None else ""
     )
@@ -318,7 +347,7 @@ async def submit_once(
     def observe(request):
         parsed = urlparse(request.url)
         metadata = {"method": request.method, "host": parsed.hostname, "path": parsed.path}
-        if not observed.is_set() and parsed.scheme in {"https", "http"} and metadata == matcher:
+        if not observed.is_set() and parsed.scheme in {"https", "http"} and metadata in [matcher, native_action]:
             # Never read headers, body, cookies or query parameters into the receipt.
             intent.update(
                 state="SUBMIT_RESULT_UNCONFIRMED", attempt_increment=1, dispatch_confirmed=True, dispatch=metadata
@@ -351,10 +380,10 @@ async def submit_once(
             observed.set()
 
     listening = page is not None
-    event = "request" if matcher else "response"
-    listener = observe if matcher else observe_response
     if listening:
-        page.on(event, listener)
+        page.on("request", observe)
+        if matcher is None:
+            page.on("response", observe_response)
     try:
         try:
             await click()
@@ -371,7 +400,9 @@ async def submit_once(
                 )
     finally:
         if listening:
-            page.remove_listener(event, listener)
+            page.remove_listener("request", observe)
+            if matcher is None:
+                page.remove_listener("response", observe_response)
     save_evidence(path, intent)
     return int(intent["dispatch_confirmed"])
 

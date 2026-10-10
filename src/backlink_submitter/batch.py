@@ -529,38 +529,44 @@ async def run_batch(
                 flush=True,
             )
         if connector is not None:
-            if mode != "live" or concurrency != 1:
-                raise ValueError("Host mailbox execution is serial LIVE only")
+            if mode != "live" or concurrency > 2:
+                raise ValueError("Host mailbox execution requires LIVE concurrency <=2")
             from playwright.async_api import async_playwright
 
             from .batch_worker import run_site
 
-            worker_results = []
+            semaphore = asyncio.Semaphore(concurrency)
             async with async_playwright() as playwright:
-                for job in jobs:
-                    try:
-                        result = await asyncio.wait_for(run_site(job, pack, api, playwright, connector=connector), 270)
-                    except Exception as exc:
-                        result = {
-                            "outcome": "TEMPORARILY_UNAVAILABLE",
-                            "reason": "WORKER_TIMEOUT"
-                            if isinstance(exc, TimeoutError)
-                            else "WORKER_CRASH_OR_INVALID_RESULT",
-                            "error_type": type(exc).__name__,
-                            "coverage": "deferred",
-                        }
-                    result["backlink_id"] = job["backlink_id"]
-                    worker_results.append(result)
-                    print(
-                        json.dumps(
-                            {
-                                "site_finished": job["backlink_id"],
-                                "outcome": result["outcome"],
-                                "reason": result["reason"],
+
+                async def connected_worker(job):
+                    async with semaphore:
+                        try:
+                            result = await asyncio.wait_for(
+                                run_site(job, pack, api, playwright, connector=connector), 360
+                            )
+                        except Exception as exc:
+                            result = {
+                                "outcome": "TEMPORARILY_UNAVAILABLE",
+                                "reason": "WORKER_TIMEOUT"
+                                if isinstance(exc, TimeoutError)
+                                else "WORKER_CRASH_OR_INVALID_RESULT",
+                                "error_type": type(exc).__name__,
+                                "coverage": "deferred",
                             }
-                        ),
-                        flush=True,
-                    )
+                        result["backlink_id"] = job["backlink_id"]
+                        print(
+                            json.dumps(
+                                {
+                                    "site_finished": job["backlink_id"],
+                                    "outcome": result["outcome"],
+                                    "reason": result["reason"],
+                                }
+                            ),
+                            flush=True,
+                        )
+                        return result
+
+                worker_results = await asyncio.gather(*(connected_worker(job) for job in jobs))
         else:
             worker_results = await run_pool(
                 jobs,

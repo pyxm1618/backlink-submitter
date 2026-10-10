@@ -16,7 +16,10 @@ ENTRY = re.compile(
     r"\b(submit|add (?:a |your )?(?:product|startup|tool|website)|list your product|launch|contribute|guest post|write for us|publish|community|directory|sign in|log in|login|register)\b|提交|收录|投稿|发布|登录",
     re.I,
 )
-FINAL = re.compile(r"^(?:submit|add|list|publish)(?: (?:your |a )?(?:product|startup|tool|website|listing))?$", re.I)
+FINAL = re.compile(
+    r"^(?:submit|add|list|publish|launch)(?: (?:your |a )?(?:product|startup|tool|website|listing|project)| for (?:launch|review))?$",
+    re.I,
+)
 
 # These are exact positive policy statements, not absence-of-evidence heuristics.
 POLICIES = [
@@ -404,6 +407,12 @@ async def build_adapter(page, pack, domain, *, first_submit=False):
                     "reason": "OWNER_FACT_REQUIRED",
                     "missing_fields": [field],
                 }, None
+            from .contracts import fitting_field_value
+
+            try:
+                value = fitting_field_value(pack, field, value, control["maxLength"])
+            except ValueError:
+                return review("APPROVED_TEXT_DOES_NOT_FIT"), None
             if (
                 control["maxLength"] > 0
                 and len(value) > control["maxLength"]
@@ -416,6 +425,14 @@ async def build_adapter(page, pack, domain, *, first_submit=False):
             adapter["fields"][field] = selector
             if control["required"]:
                 adapter["required_fields"].append(field)
+        elif control["type"] == "checkbox" and re.fullmatch(r"cat(?:egor(?:y|ies))?(?:\[\])?", control["name"], re.I):
+            if selector and any(
+                label in {"Games", "Gaming", "Entertainment", "Party Games", "Social Games", "Web Application"}
+                for label in control["labels"]
+            ):
+                adapter.setdefault("ordinary_checkboxes", []).append(selector)
+            elif control["required"]:
+                return review("TAXONOMY_UNCONFIRMED"), None
         elif control["required"] or control["type"] in {"checkbox", "radio"}:
             if (
                 control["type"] == "checkbox"
@@ -597,6 +614,11 @@ async def discover(page, pack, job, *, connector=None, on_ready=None):
         # Never save auth URL, OAuth code, email body or OTP.
         guard.phase = "DISCOVERY"
         safe_url = page.url if official_url(page.url, domain) else "https://" + domain + "/"
+        if official_url(page.url, domain) and "discovery_visited" in extra:
+            observed = list(extra["discovery_visited"])
+            if safe_url not in observed:
+                observed.append(safe_url)
+            extra["discovery_visited"] = observed
         page_title = await page.title()
         field_labels = await page.locator("input,select,textarea").evaluate_all(
             "es=>es.filter(e=>e.type!=='hidden'&&e.type!=='password').map(e=>({type:e.type,name:e.name,label:[...e.labels||[]].map(l=>l.innerText.trim()).join(' ')}))"
@@ -612,6 +634,9 @@ async def discover(page, pack, job, *, connector=None, on_ready=None):
             automatic_login=counters["automatic_login"],
             automatic_oauth=counters["automatic_oauth"],
             automatic_email_verification=counters["automatic_email_verification"],
+            gmail_challenge_triggered=counters.get("gmail_challenge_triggered", 0),
+            oauth_flow_started=result.get("oauth_flow_started", False)
+            or (guard.oauth_active and not result.get("submit_clicked") and not counters["automatic_oauth"]),
             blocked_business_writes=guard.blocked_writes,
             auth_requests=guard.auth_requests,
         )
