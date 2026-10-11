@@ -43,6 +43,7 @@ DENY = (
     "tierlistbase",
 )
 RECEIPTS = (
+    "待审核",
     "submission received",
     "thank you for submitting",
     "pending review",
@@ -264,6 +265,70 @@ def validate_dispatch_metadata(metadata):
     safe_artifact(metadata)
 
 
+def record_validation_rejection(journal, *, message, response_dispatch, request_not_accepted, acceptance_evidence):
+    """Record an observed field-validation rejection, never infer one from silence."""
+    path = Path(journal)
+    receipt = json.loads(path.read_text())
+    validate_dispatch_metadata(response_dispatch)
+    if (
+        receipt.get("state") != "SUBMIT_RESULT_UNCONFIRMED"
+        or receipt.get("dispatch_confirmed") is not True
+        or receipt.get("dispatch") != response_dispatch
+        or request_not_accepted is not True
+        or acceptance_evidence is not False
+        or not isinstance(message, str)
+        or not re.search(r"标签|必填|格式|不能为空|长度|validation|required|invalid|maximum", message, re.I)
+        or receipt.get("result_url")
+        or receipt.get("evidence_code")
+        or receipt.get("proof")
+    ):
+        raise ValueError("Explicit validation rejection without acceptance evidence required")
+    receipt.update(
+        state="VALIDATION_REJECTED",
+        validation_rejection={
+            "message": message,
+            "request_not_accepted": True,
+            "acceptance_evidence": False,
+            "observed_at": now(),
+        },
+    )
+    save_evidence(path, receipt)
+
+
+def validation_retry_path(journal, *, backlink_id, prior_attempts):
+    """Keep every dispatch receipt and reserve at most two correction attempts."""
+    root = Path(journal)
+    if json.loads(root.read_text()).get("validation_correction_of"):
+        raise ValueError("Validation correction must use the original per-platform intent")
+    previous = root
+    correction_count = 0
+    for number in (1, 2):
+        candidate = root.with_suffix(f".validation-retry-{number}.json")
+        if not candidate.exists():
+            break
+        previous = candidate
+        correction_count = number
+    receipt = json.loads(previous.read_text())
+    rejection = receipt.get("validation_rejection", {})
+    if (
+        correction_count >= 2
+        or receipt.get("project_id") != PROJECT
+        or receipt.get("backlink_id") != backlink_id
+        or receipt.get("state") != "VALIDATION_REJECTED"
+        or receipt.get("dispatch_confirmed") is not True
+        or rejection.get("request_not_accepted") is not True
+        or rejection.get("acceptance_evidence") is not False
+        or not rejection.get("message")
+        or receipt.get("proof")
+        or receipt.get("evidence_code")
+        or receipt.get("result_url")
+        or int(prior_attempts or "0") != int(receipt.get("prior_attempts") or "0") + 1
+    ):
+        raise ValueError("Validation correction blocked by outcome, attempt count or retry limit")
+    validate_dispatch_metadata(receipt.get("dispatch"))
+    return root.with_suffix(f".validation-retry-{correction_count + 1}.json")
+
+
 async def submit_once(
     journal,
     *,
@@ -282,6 +347,7 @@ async def submit_once(
     submission_request=None,
     dispatch_timeout_ms=30000,
     before_submit=None,
+    validation_correction=False,
 ):
     validate_project(project_id)
     validate_payload(payload)
@@ -289,7 +355,8 @@ async def submit_once(
         raise ValueError("HUMAN_VERIFICATION_REQUIRED")
     if missing_required:
         raise ValueError("OWNER_INPUT_REQUIRED: mandatory facts missing")
-    if blacklisted or not qualified or prior_status != "待提交":
+    allowed_statuses = {"待提交", "提交失败"} if validation_correction is True else {"待提交"}
+    if blacklisted or not qualified or prior_status not in allowed_statuses:
         raise ValueError("Submit blocked by blacklist, qualification or existing status")
     if not final_action:
         return 0
@@ -309,6 +376,8 @@ async def submit_once(
     if type(dispatch_timeout_ms) is not int or not 0 < dispatch_timeout_ms <= 30000:
         raise ValueError("Dispatch observation timeout must be within 30 seconds")
     path = Path(journal)
+    if validation_correction is True:
+        path = validation_retry_path(path, backlink_id=backlink_id, prior_attempts=prior_attempts)
     path.parent.mkdir(parents=True, exist_ok=True)
     intent = {
         "project_id": PROJECT,
@@ -321,6 +390,8 @@ async def submit_once(
         "dispatch": None,
         "before_submit": before_submit,
     }
+    if validation_correction is True:
+        intent["validation_correction_of"] = str(Path(journal))
     # Atomic O_EXCL across processes/restarts. Caller uses the same per-key path for every run.
     try:
         with path.open("x", encoding="utf-8") as stream:
